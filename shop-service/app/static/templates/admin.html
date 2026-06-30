@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: '#FFF7ED',
+          100: '#FFEDD5',
+          200: '#FED7AA',
+          300: '#FDBA74',
+          400: '#FB923C',
+          500: '#F97316',
+          600: '#EA580C',
+          700: '#C2410C',
+          800: '#9A3412',
+          900: '#7C2D12',
+        },
+        sidebar: {
+          DEFAULT: '#111827',
+          hover: '#1F2937',
+          border: '#1F2937',
+        },
+        surface: {
+          DEFAULT: '#F9FAFB',
+          warm: '#FAFAF9',
+          card: '#FFFFFF',
+        }
+      },
+      fontFamily: {
+        sans: ['"Noto Sans SC"', 'system-ui', '-apple-system', 'sans-serif'],
+      },
+    },
+  },
+}
+</script>
+<style>
+  [v-cloak] { display: none; }
+  * { font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif; }
+
+  .fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
+  .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+  .toast-enter-active { animation: slideIn 0.35s cubic-bezier(0.21, 1.02, 0.73, 1); }
+  .toast-leave-active { animation: slideOut 0.3s ease-in; }
+  @keyframes slideIn { from { transform: translateX(120%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+  @keyframes slideOut { from { transform: translateX(0); opacity:1; } to { transform: translateX(120%); opacity:0; } }
+
+  .modal-backdrop {
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  /* Sidebar link styles */
+  .sidebar-link {
+    position: relative;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+  }
+  .sidebar-link:hover {
+    background: rgba(31, 41, 55, 0.7);
+  }
+  .sidebar-link.active {
+    background: rgba(249, 115, 22, 0.08);
+    border-left-color: #F97316;
+  }
+  .sidebar-link.active .sidebar-icon,
+  .sidebar-link.active .sidebar-text {
+    color: #F97316;
+  }
+
+  /* Table row hover */
+  .table-row-hover:hover {
+    background-color: #FFF7ED;
+  }
+
+  /* Custom scrollbar for sidebar */
+  .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+  .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: #4B5563; }
+
+  /* Input focus ring */
+  .input-focus {
+    transition: all 0.2s ease;
+  }
+  .input-focus:focus {
+    outline: none;
+    border-color: #F97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+  }
+
+  /* Pagination active */
+  .page-active {
+    background-color: #F97316;
+    color: white;
+    border-color: #F97316;
+  }
+
+  /* Empty state icon */
+  .empty-icon { color: #FDBA74; }
+
+  /* Smooth page transitions */
+  .module-transition {
+    animation: fadeUp 0.3s ease;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body class="bg-surface min-h-screen" v-cloak>
+<div id="app">
+
+  <!-- Toast -->
+  <div class="fixed top-4 right-4 z-[9999] flex flex-col gap-3">
+    <transition-group name="toast">
+      <div v-for="t in toasts" :key="t.id"
+        :class="['px-5 py-3 rounded-xl shadow-lg text-white text-sm min-w-[280px] flex items-center gap-2 border',
+          t.type==='success' ? 'bg-emerald-500 border-emerald-400' :
+          t.type==='error' ? 'bg-red-500 border-red-400' :
+          'bg-brand-500 border-brand-400']">
+        <!-- success icon -->
+        <svg v-if="t.type==='success'" class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        <!-- error icon -->
+        <svg v-if="t.type==='error'" class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        <!-- info icon -->
+        <svg v-if="t.type!=='success'&&t.type!=='error'" class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <span>{{ t.msg }}</span>
+      </div>
+    </transition-group>
+  </div>
+
+  <!-- Confirm Modal -->
+  <transition name="fade">
+    <div v-if="confirmVisible" class="fixed inset-0 z-[9998] flex items-center justify-center modal-backdrop" @click.self="confirmVisible=false">
+      <div class="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-md mx-4 border border-gray-100">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">{{ confirmTitle }}</h3>
+        <p class="text-gray-500 text-sm mb-6 leading-relaxed">{{ confirmMsg }}</p>
+        <div class="flex justify-end gap-3">
+          <button @click="confirmVisible=false" class="px-5 py-2.5 text-sm rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium">取消</button>
+          <button @click="confirmCb();confirmVisible=false"
+            :class="['px-5 py-2.5 text-sm rounded-xl text-white font-medium transition shadow-sm',
+              confirmDanger ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-brand-500 hover:bg-brand-600 shadow-brand-200']">
+            确定
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- Form Modal (generic) -->
+  <transition name="fade">
+    <div v-if="formModal.visible" class="fixed inset-0 z-[9997] flex items-center justify-center modal-backdrop" @click.self="formModal.visible=false">
+      <div class="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-lg mx-4 border border-gray-100">
+        <h3 class="text-lg font-semibold text-gray-800 mb-5">{{ formModal.title }}</h3>
+        <div class="space-y-4">
+          <template v-for="field in formModal.fields" :key="field.key">
+            <div>
+              <label class="block text-sm font-medium text-gray-600 mb-1.5">{{ field.label }}</label>
+              <select v-if="field.type==='select'" v-model="formModal.data[field.key]"
+                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm input-focus bg-white">
+                <option v-for="opt in field.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+              <textarea v-else-if="field.type==='textarea'" v-model="formModal.data[field.key]" rows="3"
+                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm input-focus resize-none"></textarea>
+              <input v-else :type="field.type||'text'" v-model="formModal.data[field.key]"
+                class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm input-focus" />
+            </div>
+          </template>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+          <button @click="formModal.visible=false" class="px-5 py-2.5 text-sm rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium">取消</button>
+          <button @click="formModal.onSubmit()" class="px-5 py-2.5 text-sm rounded-xl bg-brand-500 text-white hover:bg-brand-600 transition font-medium shadow-sm shadow-brand-200">提交</button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- ========== LOGIN ========== -->
+  <div v-if="!token" class="min-h-screen flex items-center justify-center" style="background: linear-gradient(135deg, #111827 0%, #1F2937 50%, #1a1a2e 100%);">
+    <div class="w-full max-w-md mx-4">
+      <div class="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
+        <div class="text-center mb-8">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-brand-500 rounded-2xl mb-4 shadow-lg shadow-brand-200">
+            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          </div>
+          <h2 class="text-2xl font-bold text-gray-800">管理后台</h2>
+          <p class="text-gray-400 text-sm mt-1">请使用管理员邮箱登录</p>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1.5">邮箱</label>
+            <input v-model="loginForm.email" type="email" @keyup.enter="handleLogin"
+              class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm input-focus shadow-sm"
+              placeholder="请输入管理员邮箱" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1.5">密码</label>
+            <input v-model="loginForm.password" type="password" @keyup.enter="handleLogin"
+              class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm input-focus shadow-sm"
+              placeholder="请输入密码" />
+          </div>
+          <button @click="handleLogin" :disabled="loginLoading"
+            class="w-full py-2.5 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm shadow-brand-200">
+            {{ loginLoading ? '登录中...' : '登 录' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MAIN LAYOUT ========== -->
+  <div v-else class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-60 bg-sidebar text-gray-400 flex flex-col flex-shrink-0 fixed h-full z-50">
+      <!-- Logo Area -->
+      <div class="h-16 flex items-center px-5 border-b border-sidebar-border flex-shrink-0">
+        <div class="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center mr-3 shadow-sm shadow-brand-500/30">
+          <svg class="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:18px;height:18px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        </div>
+        <span class="text-base font-semibold text-white tracking-wide">Shop Admin</span>
+      </div>
+
+      <!-- Nav Links -->
+      <nav class="flex-1 py-4 overflow-y-auto sidebar-scroll">
+        <a v-for="item in sideMenus" :key="item.key"
+          @click="currentModule=item.key"
+          :class="['sidebar-link flex items-center px-5 py-3 cursor-pointer text-sm',
+            currentModule===item.key?'active':'']">
+          <span class="mr-3 sidebar-icon" v-html="item.icon"></span>
+          <span class="sidebar-text">{{ item.label }}</span>
+        </a>
+      </nav>
+
+      <!-- User Info -->
+      <div class="p-4 border-t border-sidebar-border flex-shrink-0">
+        <div class="flex items-center">
+          <div class="w-9 h-9 bg-brand-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm shadow-brand-500/30">A</div>
+          <div class="ml-3 flex-1 min-w-0">
+            <p class="text-sm text-white truncate font-medium">{{ adminName }}</p>
+            <p class="text-xs text-gray-500">管理员</p>
+          </div>
+          <button @click="handleLogout" class="text-gray-500 hover:text-red-400 transition" title="退出登录">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-auto ml-60">
+      <!-- Header -->
+      <header class="h-16 bg-white/80 backdrop-blur-sm border-b border-gray-100 flex items-center px-8 flex-shrink-0 sticky top-0 z-40">
+        <h1 class="text-lg font-semibold text-gray-800">{{ currentModuleLabel }}</h1>
+        <div class="ml-auto flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-xs text-gray-400">在线</span>
+        </div>
+      </header>
+      <div class="p-8">
+
+        <!-- ========== 分类管理 ========== -->
+        <div v-if="currentModule==='categories'" class="module-transition">
+          <div class="flex items-center justify-between mb-6">
+            <p class="text-sm text-gray-400">管理商品分类，支持多级分类</p>
+            <button @click="openCategoryForm()" class="px-5 py-2.5 bg-brand-500 text-white text-sm rounded-xl hover:bg-brand-600 transition font-medium shadow-sm shadow-brand-200 flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+              新增分类
+            </button>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50/80 text-gray-500">
+                <tr>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">ID</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">分类名称</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">父级分类</th>
+                  <th class="text-right px-6 py-3.5 font-medium text-xs uppercase tracking-wider">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                <tr v-if="catLoading"><td colspan="4" class="px-6 py-12 text-center">
+                  <div class="flex flex-col items-center gap-2">
+                    <svg class="w-8 h-8 text-brand-200 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    <span class="text-gray-400 text-sm">加载中...</span>
+                  </div>
+                </td></tr>
+                <tr v-else-if="!categories.length"><td colspan="4" class="px-6 py-12 text-center">
+                  <svg class="w-12 h-12 mx-auto mb-3 empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                  <span class="text-gray-400 text-sm">暂无分类数据</span>
+                </td></tr>
+                <tr v-for="c in categories" :key="c.id" class="table-row-hover transition-colors">
+                  <td class="px-6 py-3.5 text-gray-400 font-mono text-xs">{{ c.id }}</td>
+                  <td class="px-6 py-3.5 font-medium text-gray-700">{{ c.name }}</td>
+                  <td class="px-6 py-3.5 text-gray-400">{{ c.parent_id || '—' }}</td>
+                  <td class="px-6 py-3.5 text-right space-x-3">
+                    <button @click="openCategoryForm(c)" class="text-brand-500 hover:text-brand-700 text-xs font-medium transition">编辑</button>
+                    <button @click="deleteCategory(c.id)" class="text-red-500 hover:text-red-700 text-xs font-medium transition">删除</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ========== 商品管理 ========== -->
+        <div v-if="currentModule==='products'" class="module-transition">
+          <div class="flex items-center justify-between mb-6">
+            <p class="text-sm text-gray-400">管理商品信息，发布、编辑、上下架</p>
+            <button @click="openProductForm()" class="px-5 py-2.5 bg-brand-500 text-white text-sm rounded-xl hover:bg-brand-600 transition font-medium shadow-sm shadow-brand-200 flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+              发布商品
+            </button>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50/80 text-gray-500">
+                <tr>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">ID</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">商品名称</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">价格</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">库存</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">状态</th>
+                  <th class="text-right px-6 py-3.5 font-medium text-xs uppercase tracking-wider">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                <tr v-if="prodLoading"><td colspan="6" class="px-6 py-12 text-center">
+                  <div class="flex flex-col items-center gap-2">
+                    <svg class="w-8 h-8 text-brand-200 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    <span class="text-gray-400 text-sm">加载中...</span>
+                  </div>
+                </td></tr>
+                <tr v-else-if="!products.length"><td colspan="6" class="px-6 py-12 text-center">
+                  <svg class="w-12 h-12 mx-auto mb-3 empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                  <span class="text-gray-400 text-sm">暂无商品数据</span>
+                </td></tr>
+                <tr v-for="p in products" :key="p.id" class="table-row-hover transition-colors">
+                  <td class="px-6 py-3.5 text-gray-400 font-mono text-xs">{{ p.id }}</td>
+                  <td class="px-6 py-3.5">
+                    <div class="flex items-center">
+                      <img v-if="p.image_url" :src="p.image_url" class="w-10 h-10 rounded-lg object-cover mr-3 ring-1 ring-gray-100" />
+                      <div v-else class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-brand-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                      </div>
+                      <span class="font-medium text-gray-700">{{ p.name }}</span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-3.5 text-gray-600 font-medium">&yen;{{ Number(p.price).toFixed(2) }}</td>
+                  <td class="px-6 py-3.5 text-gray-500">{{ p.stock }}</td>
+                  <td class="px-6 py-3.5">
+                    <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium',
+                      p.status==='on_sale' ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200' : 'bg-gray-50 text-gray-500 ring-1 ring-gray-200']">
+                      <span v-if="p.status==='on_sale'" class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+                      <span v-else class="w-1.5 h-1.5 rounded-full bg-gray-300 mr-1.5"></span>
+                      {{ p.status==='on_sale'?'上架':'下架' }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-3.5 text-right space-x-3">
+                    <button @click="openProductForm(p)" class="text-brand-500 hover:text-brand-700 text-xs font-medium transition">编辑</button>
+                    <button @click="toggleProductStatus(p)"
+                      :class="p.status==='on_sale' ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700'"
+                      class="text-xs font-medium transition">
+                      {{ p.status==='on_sale'?'下架':'上架' }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Product Pagination -->
+          <div v-if="prodTotal>prodPageSize" class="mt-5 flex items-center justify-between text-sm text-gray-400">
+            <span>共 {{ prodTotal }} 条</span>
+            <div class="flex gap-1">
+              <button @click="prodPage=Math.max(1,prodPage-1);loadProducts()" :disabled="prodPage<=1"
+                class="px-3.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs">上一页</button>
+              <span :class="['px-3.5 py-1.5 border rounded-lg text-xs font-medium', 'page-active']">{{ prodPage }} / {{ prodPages }}</span>
+              <button @click="prodPage=Math.min(prodPages,prodPage+1);loadProducts()" :disabled="prodPage>=prodPages"
+                class="px-3.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs">下一页</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 订单查看 ========== -->
+        <div v-if="currentModule==='orders'" class="module-transition">
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex gap-2">
+              <button v-for="s in orderStatusOptions" :key="s.value"
+                @click="orderStatusFilter=s.value;orderPage=1;loadOrders()"
+                :class="['px-4 py-2 text-sm rounded-xl border transition font-medium',
+                  orderStatusFilter===s.value ? 'bg-brand-500 text-white border-brand-500 shadow-sm shadow-brand-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:border-gray-300']">
+                {{ s.label }}
+              </button>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50/80 text-gray-500">
+                <tr>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">订单号</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">用户</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">商品</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">金额</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">状态</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">创建时间</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                <tr v-if="orderLoading"><td colspan="6" class="px-6 py-12 text-center">
+                  <div class="flex flex-col items-center gap-2">
+                    <svg class="w-8 h-8 text-brand-200 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    <span class="text-gray-400 text-sm">加载中...</span>
+                  </div>
+                </td></tr>
+                <tr v-else-if="!orders.length"><td colspan="6" class="px-6 py-12 text-center">
+                  <svg class="w-12 h-12 mx-auto mb-3 empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                  <span class="text-gray-400 text-sm">暂无订单数据</span>
+                </td></tr>
+                <tr v-for="o in orders" :key="o.id" class="table-row-hover transition-colors">
+                  <td class="px-6 py-3.5 font-medium text-gray-700">{{ o.order_no || o.id }}</td>
+                  <td class="px-6 py-3.5 text-gray-500">{{ o.user_id }}</td>
+                  <td class="px-6 py-3.5 text-gray-600 max-w-xs truncate">{{ o.product_name || '—' }}</td>
+                  <td class="px-6 py-3.5 text-gray-700 font-medium">&yen;{{ Number(o.total_amount || o.amount || 0).toFixed(2) }}</td>
+                  <td class="px-6 py-3.5">
+                    <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ring-1', orderStatusColor(o.status)]">
+                      {{ orderStatusLabel(o.status) }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-3.5 text-gray-400 text-xs">{{ formatTime(o.created_at) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Order Pagination -->
+          <div v-if="orderTotal>orderPageSize" class="mt-5 flex items-center justify-between text-sm text-gray-400">
+            <span>共 {{ orderTotal }} 条</span>
+            <div class="flex gap-1">
+              <button @click="orderPage=Math.max(1,orderPage-1);loadOrders()" :disabled="orderPage<=1"
+                class="px-3.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs">上一页</button>
+              <span :class="['px-3.5 py-1.5 border rounded-lg text-xs font-medium', 'page-active']">{{ orderPage }} / {{ orderPages }}</span>
+              <button @click="orderPage=Math.min(orderPages,orderPage+1);loadOrders()" :disabled="orderPage>=orderPages"
+                class="px-3.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs">下一页</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 售后审核 ========== -->
+        <div v-if="currentModule==='aftersales'" class="module-transition">
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex gap-2">
+              <button v-for="s in aftersaleStatusOptions" :key="s.value"
+                @click="aftersaleStatusFilter=s.value;aftersalePage=1;loadAfterSales()"
+                :class="['px-4 py-2 text-sm rounded-xl border transition font-medium',
+                  aftersaleStatusFilter===s.value ? 'bg-brand-500 text-white border-brand-500 shadow-sm shadow-brand-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:border-gray-300']">
+                {{ s.label }}
+              </button>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50/80 text-gray-500">
+                <tr>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">ID</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">订单号</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">用户</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">原因</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">状态</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">备注</th>
+                  <th class="text-right px-6 py-3.5 font-medium text-xs uppercase tracking-wider">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                <tr v-if="aftersaleLoading"><td colspan="7" class="px-6 py-12 text-center">
+                  <div class="flex flex-col items-center gap-2">
+                    <svg class="w-8 h-8 text-brand-200 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    <span class="text-gray-400 text-sm">加载中...</span>
+                  </div>
+                </td></tr>
+                <tr v-else-if="!aftersales.length"><td colspan="7" class="px-6 py-12 text-center">
+                  <svg class="w-12 h-12 mx-auto mb-3 empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                  <span class="text-gray-400 text-sm">暂无售后数据</span>
+                </td></tr>
+                <tr v-for="a in aftersales" :key="a.id" class="table-row-hover transition-colors">
+                  <td class="px-6 py-3.5 text-gray-400 font-mono text-xs">{{ a.id }}</td>
+                  <td class="px-6 py-3.5 font-medium text-gray-700">{{ a.order_id }}</td>
+                  <td class="px-6 py-3.5 text-gray-500">{{ a.user_id }}</td>
+                  <td class="px-6 py-3.5 text-gray-600 max-w-[200px] truncate">{{ a.reason || '—' }}</td>
+                  <td class="px-6 py-3.5">
+                    <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ring-1', aftersaleStatusColor(a.status)]">
+                      {{ aftersaleStatusLabel(a.status) }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-3.5 text-gray-400 max-w-[150px] truncate">{{ a.admin_note || '—' }}</td>
+                  <td class="px-6 py-3.5 text-right space-x-3">
+                    <button v-if="a.status==='pending'" @click="reviewAfterSale(a,'approved')"
+                      class="text-emerald-600 hover:text-emerald-700 text-xs font-medium transition">通过</button>
+                    <button v-if="a.status==='pending'" @click="reviewAfterSale(a,'rejected')"
+                      class="text-red-500 hover:text-red-700 text-xs font-medium transition">驳回</button>
+                    <button v-if="a.status==='approved'" @click="reviewAfterSale(a,'completed')"
+                      class="text-brand-500 hover:text-brand-700 text-xs font-medium transition">确认完成</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- AfterSale Pagination -->
+          <div v-if="aftersaleTotal>aftersalePageSize" class="mt-5 flex items-center justify-between text-sm text-gray-400">
+            <span>共 {{ aftersaleTotal }} 条</span>
+            <div class="flex gap-1">
+              <button @click="aftersalePage=Math.max(1,aftersalePage-1);loadAfterSales()" :disabled="aftersalePage<=1"
+                class="px-3.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs">上一页</button>
+              <span :class="['px-3.5 py-1.5 border rounded-lg text-xs font-medium', 'page-active']">{{ aftersalePage }} / {{ aftersalePages }}</span>
+              <button @click="aftersalePage=Math.min(aftersalePages,aftersalePage+1);loadAfterSales()" :disabled="aftersalePage>=aftersalePages"
+                class="px-3.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs">下一页</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 物流管理 ========== -->
+        <div v-if="currentModule==='logistics'" class="module-transition">
+          <div class="flex items-center justify-between mb-6">
+            <p class="text-sm text-gray-400">对已支付订单推进物流状态</p>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50/80 text-gray-500">
+                <tr>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">订单号</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">用户</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">物流状态</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                <tr v-if="logisticsLoading"><td colspan="4" class="px-6 py-12 text-center">
+                  <div class="flex flex-col items-center gap-2">
+                    <svg class="w-8 h-8 text-brand-200 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    <span class="text-gray-400 text-sm">加载中...</span>
+                  </div>
+                </td></tr>
+                <tr v-else-if="!logisticsOrders.length"><td colspan="4" class="px-6 py-12 text-center">
+                  <svg class="w-12 h-12 mx-auto mb-3 empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7h12l-4 9H4L8 7zm0 0l-3 13m3-13l3 13m-6-4h.01M16 16h.01M3 21h18"></path></svg>
+                  <span class="text-gray-400 text-sm">暂无可推进的订单</span>
+                </td></tr>
+                <tr v-for="o in logisticsOrders" :key="o.id" class="table-row-hover transition-colors">
+                  <td class="px-6 py-3.5 font-medium text-gray-700">{{ o.order_no || o.id }}</td>
+                  <td class="px-6 py-3.5 text-gray-500">{{ o.user_id }}</td>
+                  <td class="px-6 py-3.5">
+                    <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ring-1', orderStatusColor(o.status)]">
+                      {{ orderStatusLabel(o.status) }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-3.5">
+                    <button @click="advanceLogistics(o)"
+                      :class="['px-4 py-1.5 text-xs rounded-xl border font-medium transition',
+                        o.status==='shipped' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-brand-50 text-brand-600 border-brand-200 hover:bg-brand-100']">
+                      {{ o.status==='paid' ? '发货' : o.status==='shipped' ? '确认送达' : '推进' }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ========== 用户管理 ========== -->
+        <div v-if="currentModule==='users'" class="module-transition">
+          <div class="flex items-center justify-between mb-6">
+            <p class="text-sm text-gray-400">查看所有注册用户</p>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50/80 text-gray-500">
+                <tr>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">ID</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">邮箱</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">昵称</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">角色</th>
+                  <th class="text-left px-6 py-3.5 font-medium text-xs uppercase tracking-wider">创建时间</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                <tr v-if="usersLoading"><td colspan="5" class="px-6 py-12 text-center">
+                  <div class="flex flex-col items-center gap-2">
+                    <svg class="w-8 h-8 text-brand-200 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                    <span class="text-gray-400 text-sm">加载中...</span>
+                  </div>
+                </td></tr>
+                <tr v-else-if="!usersList.length"><td colspan="5" class="px-6 py-12 text-center">
+                  <svg class="w-12 h-12 mx-auto mb-3 empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path></svg>
+                  <span class="text-gray-400 text-sm">暂无用户数据</span>
+                </td></tr>
+                <tr v-for="u in usersList" :key="u.id" class="table-row-hover transition-colors">
+                  <td class="px-6 py-3.5 text-gray-400 font-mono text-xs">{{ u.id }}</td>
+                  <td class="px-6 py-3.5 font-medium text-gray-700">{{ u.email || '—' }}</td>
+                  <td class="px-6 py-3.5 text-gray-600">{{ u.nickname || '—' }}</td>
+                  <td class="px-6 py-3.5">
+                    <span :class="['inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ring-1',
+                      u.role==='admin' ? 'bg-violet-50 text-violet-600 ring-violet-200' : 'bg-gray-50 text-gray-500 ring-gray-200']">
+                      {{ u.role==='admin'?'管理员':'用户' }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-3.5 text-gray-400 text-xs">{{ formatTime(u.created_at) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- User Pagination -->
+          <div v-if="usersTotal>usersPageSize" class="mt-5 flex items-center justify-between text-sm text-gray-400">
+            <span>共 {{ usersTotal }} 条</span>
+            <div class="flex gap-1">
+              <button @click="usersPage=Math.max(1,usersPage-1);loadUsers()" :disabled="usersPage<=1"
+                class="px-3.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs">上一页</button>
+              <span :class="['px-3.5 py-1.5 border rounded-lg text-xs font-medium', 'page-active']">{{ usersPage }} / {{ usersPages }}</span>
+              <button @click="usersPage=Math.min(usersPages,usersPage+1);loadUsers()" :disabled="usersPage>=usersPages"
+                class="px-3.5 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs">下一页</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
+
+const API_BASE = '/api/shop';
+
+createApp({
+  setup() {
+    // ====== Auth ======
+    const token = ref(localStorage.getItem('admin_token') || '');
+    const adminName = ref(localStorage.getItem('admin_name') || '');
+    const loginForm = reactive({ email: '', password: '' });
+    const loginLoading = ref(false);
+
+    // ====== Navigation ======
+    const currentModule = ref('categories');
+
+    const sideMenus = [
+      { key: 'categories', label: '分类管理', icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>' },
+      { key: 'products', label: '商品管理', icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>' },
+      { key: 'orders', label: '订单查看', icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>' },
+      { key: 'aftersales', label: '售后审核', icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>' },
+      { key: 'logistics', label: '物流管理', icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12l-4 9H4L8 7zm0 0l-3 13m3-13l3 13m-6-4h.01M16 16h.01M3 21h18"></path></svg>' },
+      { key: 'users', label: '用户管理', icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path></svg>' },
+    ];
+
+    const currentModuleLabel = computed(() => {
+      const m = sideMenus.find(i => i.key === currentModule.value);
+      return m ? m.label : '';
+    });
+
+    // ====== Toast ======
+    const toasts = ref([]);
+    let toastId = 0;
+    function showToast(msg, type = 'success') {
+      const id = ++toastId;
+      toasts.value.push({ id, msg, type });
+      setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
+    }
+
+    // ====== Confirm ======
+    const confirmVisible = ref(false);
+    const confirmTitle = ref('');
+    const confirmMsg = ref('');
+    const confirmDanger = ref(true);
+    const confirmCb = ref(() => {});
+    function showConfirm(title, msg, cb, danger = true) {
+      confirmTitle.value = title;
+      confirmMsg.value = msg;
+      confirmDanger.value = danger;
+      confirmCb.value = cb;
+      confirmVisible.value = true;
+    }
+
+    // ====== Form Modal ======
+    const formModal = reactive({
+      visible: false,
+      title: '',
+      fields: [],
+      data: {},
+      onSubmit: () => {},
+    });
+    function openFormModal(title, fields, data, onSubmit) {
+      formModal.title = title;
+      formModal.fields = fields;
+      formModal.data = { ...data };
+      formModal.onSubmit = onSubmit;
+      formModal.visible = true;
+    }
+
+    // ====== HTTP Helper ======
+    function getAuthHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token.value,
+      };
+    }
+
+    async function apiGet(url, params = {}) {
+      const qs = new URLSearchParams(params).toString();
+      const fullUrl = qs ? `${API_BASE}${url}?${qs}` : `${API_BASE}${url}`;
+      try {
+        const res = await fetch(fullUrl, { headers: getAuthHeaders() });
+        const json = await res.json();
+        if (json.code !== 200) {
+          if (json.code === 401) {
+            handleLogout();
+            return null;
+          }
+          showToast(json.message || '请求失败', 'error');
+          return null;
+        }
+        return json.data;
+      } catch (e) {
+        showToast('网络错误: ' + e.message, 'error');
+        return null;
+      }
+    }
+
+    async function apiPost(url, body = {}) {
+      try {
+        const res = await fetch(`${API_BASE}${url}`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (json.code !== 200) {
+          showToast(json.message || '操作失败', 'error');
+          return null;
+        }
+        return json.data;
+      } catch (e) {
+        showToast('网络错误: ' + e.message, 'error');
+        return null;
+      }
+    }
+
+    async function apiPut(url, body = {}) {
+      try {
+        const res = await fetch(`${API_BASE}${url}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (json.code !== 200) {
+          showToast(json.message || '操作失败', 'error');
+          return null;
+        }
+        return json.data;
+      } catch (e) {
+        showToast('网络错误: ' + e.message, 'error');
+        return null;
+      }
+    }
+
+    async function apiDelete(url) {
+      try {
+        const res = await fetch(`${API_BASE}${url}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        });
+        const json = await res.json();
+        if (json.code !== 200) {
+          showToast(json.message || '删除失败', 'error');
+          return null;
+        }
+        return json.data;
+      } catch (e) {
+        showToast('网络错误: ' + e.message, 'error');
+        return null;
+      }
+    }
+
+    // ====== Login / Logout ======
+    async function handleLogin() {
+      if (!loginForm.email || !loginForm.password) {
+        showToast('请输入邮箱和密码', 'error');
+        return;
+      }
+      loginLoading.value = true;
+      try {
+        const res = await fetch(`${API_BASE}/users/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: loginForm.email,
+            password: loginForm.password,
+          }),
+        });
+        const json = await res.json();
+        loginLoading.value = false;
+
+        if (json.code !== 200) {
+          showToast(json.message || '登录失败', 'error');
+          return;
+        }
+
+        const data = json.data; // { access_token, token_type, user: { id, email, nickname, role, ... } }
+        if (!data || !data.access_token) {
+          showToast('登录返回数据异常', 'error');
+          return;
+        }
+
+        if (data.user && data.user.role !== 'admin') {
+          showToast('非管理员账号，无法进入后台', 'error');
+          return;
+        }
+
+        token.value = data.access_token;
+        adminName.value = data.user ? data.user.nickname : loginForm.email;
+        localStorage.setItem('admin_token', data.access_token);
+        localStorage.setItem('admin_name', adminName.value);
+        showToast('登录成功');
+        loadCurrentModule();
+      } catch (e) {
+        loginLoading.value = false;
+        showToast('网络错误: ' + e.message, 'error');
+      }
+    }
+
+    function handleLogout() {
+      showConfirm('退出登录', '确定要退出登录吗？', () => {
+        token.value = '';
+        adminName.value = '';
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_name');
+        showToast('已退出登录');
+      });
+    }
+
+    // ====== Categories ======
+    const categories = ref([]);
+    const catLoading = ref(false);
+
+    async function loadCategories() {
+      catLoading.value = true;
+      const data = await apiGet('/categories/admin/list');
+      catLoading.value = false;
+      if (data) {
+        categories.value = Array.isArray(data) ? data : (data.items || data.list || []);
+      }
+    }
+
+    function openCategoryForm(cat = null) {
+      const parentOptions = categories.value
+        .filter(c => c.id !== (cat && cat.id))
+        .map(c => ({ value: c.id, label: c.name }));
+      parentOptions.unshift({ value: '', label: '无 (顶级分类)' });
+
+      openFormModal(
+        cat ? '编辑分类' : '新增分类',
+        [
+          { key: 'name', label: '分类名称', type: 'text' },
+          { key: 'parent_id', label: '父级分类', type: 'select', options: parentOptions },
+        ],
+        { name: cat ? cat.name : '', parent_id: cat ? (cat.parent_id || '') : '' },
+        async () => {
+          const body = { name: formModal.data.name };
+          if (formModal.data.parent_id !== '' && formModal.data.parent_id !== null) {
+            body.parent_id = Number(formModal.data.parent_id);
+          }
+          if (cat) {
+            const result = await apiPut(`/categories/admin/${cat.id}`, body);
+            if (result !== null) { showToast('分类已更新'); loadCategories(); }
+          } else {
+            const result = await apiPost('/categories/admin', body);
+            if (result !== null) { showToast('分类已创建'); loadCategories(); }
+          }
+          formModal.visible = false;
+        }
+      );
+    }
+
+    function deleteCategory(id) {
+      showConfirm('删除分类', '确定要删除该分类吗？此操作不可撤销。', async () => {
+        const result = await apiDelete(`/categories/admin/${id}`);
+        if (result !== null) { showToast('分类已删除'); loadCategories(); }
+      });
+    }
+
+    // ====== Products ======
+    const products = ref([]);
+    const prodLoading = ref(false);
+    const prodPage = ref(1);
+    const prodPageSize = ref(10);
+    const prodTotal = ref(0);
+    const prodPages = computed(() => Math.max(1, Math.ceil(prodTotal.value / prodPageSize.value)));
+
+    async function loadProducts() {
+      prodLoading.value = true;
+      const data = await apiGet('/products/admin/list', {
+        page: prodPage.value,
+        page_size: prodPageSize.value,
+      });
+      prodLoading.value = false;
+      if (data) {
+        products.value = Array.isArray(data) ? data : (data.items || data.list || []);
+        prodTotal.value = data.total || products.value.length;
+      }
+    }
+
+    function openProductForm(prod = null) {
+      const catOptions = categories.value.map(c => ({ value: c.id, label: c.name }));
+      catOptions.unshift({ value: '', label: '请选择分类' });
+
+      openFormModal(
+        prod ? '编辑商品' : '发布商品',
+        [
+          { key: 'name', label: '商品名称', type: 'text' },
+          { key: 'description', label: '商品描述', type: 'textarea' },
+          { key: 'price', label: '价格', type: 'number' },
+          { key: 'image_url', label: '图片URL', type: 'text' },
+          { key: 'stock', label: '库存', type: 'number' },
+          { key: 'category_id', label: '分类', type: 'select', options: catOptions },
+        ],
+        {
+          name: prod ? prod.name : '',
+          description: prod ? (prod.description || '') : '',
+          price: prod ? prod.price : '',
+          image_url: prod ? (prod.image_url || '') : '',
+          stock: prod ? prod.stock : '',
+          category_id: prod ? (prod.category_id || '') : '',
+        },
+        async () => {
+          const body = {};
+          ['name', 'description', 'price', 'image_url', 'stock', 'category_id'].forEach(k => {
+            if (formModal.data[k] !== '' && formModal.data[k] !== null && formModal.data[k] !== undefined) {
+              body[k] = formModal.data[k];
+            }
+          });
+          if (body.price !== undefined) body.price = Number(body.price);
+          if (body.stock !== undefined) body.stock = Number(body.stock);
+          if (body.category_id !== undefined && body.category_id !== '') body.category_id = Number(body.category_id);
+
+          if (prod) {
+            const result = await apiPut(`/products/admin/${prod.id}`, body);
+            if (result !== null) { showToast('商品已更新'); loadProducts(); }
+          } else {
+            const result = await apiPost('/products/admin', body);
+            if (result !== null) { showToast('商品已发布'); loadProducts(); }
+          }
+          formModal.visible = false;
+        }
+      );
+    }
+
+    async function toggleProductStatus(prod) {
+      const result = await apiPut(`/products/admin/${prod.id}/toggle-status`);
+      if (result !== null) {
+        showToast(prod.status === 'on_sale' ? '已下架' : '已上架');
+        loadProducts();
+      }
+    }
+
+    // ====== Orders ======
+    const orders = ref([]);
+    const orderLoading = ref(false);
+    const orderPage = ref(1);
+    const orderPageSize = ref(10);
+    const orderTotal = ref(0);
+    const orderPages = computed(() => Math.max(1, Math.ceil(orderTotal.value / orderPageSize.value)));
+    const orderStatusFilter = ref('');
+
+    const orderStatusOptions = [
+      { value: '', label: '全部' },
+      { value: 'pending', label: '待支付' },
+      { value: 'paid', label: '已支付' },
+      { value: 'shipped', label: '已发货' },
+      { value: 'delivered', label: '已送达' },
+      { value: 'completed', label: '已完成' },
+      { value: 'cancelled', label: '已取消' },
+    ];
+
+    function orderStatusLabel(status) {
+      const map = { pending: '待支付', paid: '已支付', shipped: '已发货', delivered: '已送达', completed: '已完成', cancelled: '已取消' };
+      return map[status] || status || '未知';
+    }
+    function orderStatusColor(status) {
+      const map = {
+        pending: 'bg-amber-50 text-amber-600 ring-amber-200',
+        paid: 'bg-sky-50 text-sky-600 ring-sky-200',
+        shipped: 'bg-indigo-50 text-indigo-600 ring-indigo-200',
+        delivered: 'bg-cyan-50 text-cyan-600 ring-cyan-200',
+        completed: 'bg-emerald-50 text-emerald-600 ring-emerald-200',
+        cancelled: 'bg-gray-100 text-gray-500 ring-gray-200',
+      };
+      return map[status] || 'bg-gray-100 text-gray-600 ring-gray-200';
+    }
+
+    async function loadOrders() {
+      orderLoading.value = true;
+      const params = { page: orderPage.value, page_size: orderPageSize.value };
+      if (orderStatusFilter.value) params.status = orderStatusFilter.value;
+      const data = await apiGet('/admin/orders', params);
+      orderLoading.value = false;
+      if (data) {
+        orders.value = Array.isArray(data) ? data : (data.items || data.list || []);
+        orderTotal.value = data.total || orders.value.length;
+      }
+    }
+
+    // ====== After Sales ======
+    const aftersales = ref([]);
+    const aftersaleLoading = ref(false);
+    const aftersalePage = ref(1);
+    const aftersalePageSize = ref(10);
+    const aftersaleTotal = ref(0);
+    const aftersalePages = computed(() => Math.max(1, Math.ceil(aftersaleTotal.value / aftersalePageSize.value)));
+    const aftersaleStatusFilter = ref('');
+
+    const aftersaleStatusOptions = [
+      { value: '', label: '全部' },
+      { value: 'pending', label: '待审核' },
+      { value: 'approved', label: '已通过' },
+      { value: 'rejected', label: '已驳回' },
+      { value: 'completed', label: '已完成' },
+    ];
+
+    function aftersaleStatusLabel(status) {
+      const map = { pending: '待审核', approved: '已通过', rejected: '已驳回', completed: '已完成' };
+      return map[status] || status || '未知';
+    }
+    function aftersaleStatusColor(status) {
+      const map = {
+        pending: 'bg-amber-50 text-amber-600 ring-amber-200',
+        approved: 'bg-emerald-50 text-emerald-600 ring-emerald-200',
+        rejected: 'bg-red-50 text-red-600 ring-red-200',
+        completed: 'bg-sky-50 text-sky-600 ring-sky-200',
+      };
+      return map[status] || 'bg-gray-100 text-gray-600 ring-gray-200';
+    }
+
+    async function loadAfterSales() {
+      aftersaleLoading.value = true;
+      const params = { page: aftersalePage.value, page_size: aftersalePageSize.value };
+      if (aftersaleStatusFilter.value) params.status = aftersaleStatusFilter.value;
+      const data = await apiGet('/admin/after-sales', params);
+      aftersaleLoading.value = false;
+      if (data) {
+        aftersales.value = Array.isArray(data) ? data : (data.items || data.list || []);
+        aftersaleTotal.value = data.total || aftersales.value.length;
+      }
+    }
+
+    async function reviewAfterSale(a, action) {
+      const actionMap = { approved: '通过', rejected: '驳回', completed: '确认完成' };
+      const actionLabel = actionMap[action] || action;
+      const needNote = action === 'rejected';
+
+      if (needNote) {
+        openFormModal(`${actionLabel}售后`, [
+          { key: 'admin_note', label: '驳回原因', type: 'textarea' },
+        ], { admin_note: '' }, async () => {
+          const body = { action, admin_note: formModal.data.admin_note || '' };
+          const result = await apiPost(`/admin/after-sales/${a.id}/review`, body);
+          if (result !== null) {
+            showToast(`售后已${actionLabel}`);
+            loadAfterSales();
+          }
+          formModal.visible = false;
+        });
+      } else {
+        showConfirm(`${actionLabel}售后`, `确定要${actionLabel}该售后申请吗？`, async () => {
+          const result = await apiPost(`/admin/after-sales/${a.id}/review`, { action });
+          if (result !== null) {
+            showToast(`售后已${actionLabel}`);
+            loadAfterSales();
+          }
+        }, action === 'rejected');
+      }
+    }
+
+    // ====== Logistics ======
+    const logisticsOrders = ref([]);
+    const logisticsLoading = ref(false);
+
+    async function loadLogistics() {
+      logisticsLoading.value = true;
+      const data = await apiGet('/admin/orders', { status: 'paid', page: 1, page_size: 100 });
+      const data2 = await apiGet('/admin/orders', { status: 'shipped', page: 1, page_size: 100 });
+      logisticsLoading.value = false;
+      const list1 = Array.isArray(data) ? data : (data ? data.items || data.list || [] : []);
+      const list2 = Array.isArray(data2) ? data2 : (data2 ? data2.items || data2.list || [] : []);
+      logisticsOrders.value = [...list1, ...list2];
+    }
+
+    async function advanceLogistics(order) {
+      const actionLabel = order.status === 'paid' ? '发货' : '确认送达';
+      showConfirm('物流推进', `确定要将订单 ${order.order_no || order.id} ${actionLabel}吗？`, async () => {
+        const result = await apiPost(`/admin/logistics/${order.id}/advance`);
+        if (result !== null) {
+          showToast(`订单已${actionLabel}`);
+          loadLogistics();
+        }
+      }, false);
+    }
+
+    // ====== Users ======
+    const usersList = ref([]);
+    const usersLoading = ref(false);
+    const usersPage = ref(1);
+    const usersPageSize = ref(10);
+    const usersTotal = ref(0);
+    const usersPages = computed(() => Math.max(1, Math.ceil(usersTotal.value / usersPageSize.value)));
+
+    async function loadUsers() {
+      usersLoading.value = true;
+      const data = await apiGet('/users/list', { page: usersPage.value, page_size: usersPageSize.value });
+      usersLoading.value = false;
+      if (data) {
+        usersList.value = Array.isArray(data) ? data : (data.items || data.list || []);
+        usersTotal.value = data.total || usersList.value.length;
+      }
+    }
+
+    // ====== Utilities ======
+    function formatTime(t) {
+      if (!t) return '—';
+      try {
+        const d = new Date(t);
+        return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      } catch {
+        return t;
+      }
+    }
+
+    // ====== Module Loading ======
+    function loadCurrentModule() {
+      const loaders = {
+        categories: loadCategories,
+        products: loadProducts,
+        orders: loadOrders,
+        aftersales: loadAfterSales,
+        logistics: loadLogistics,
+        users: loadUsers,
+      };
+      const fn = loaders[currentModule.value];
+      if (fn) fn();
+    }
+
+    watch(currentModule, () => {
+      loadCurrentModule();
+    });
+
+    // ====== Init ======
+    onMounted(() => {
+      if (token.value) {
+        loadCurrentModule();
+      }
+    });
+
+    return {
+      // Auth
+      token, adminName, loginForm, loginLoading, handleLogin, handleLogout,
+      // Navigation
+      currentModule, sideMenus, currentModuleLabel,
+      // Toast
+      toasts, showToast,
+      // Confirm
+      confirmVisible, confirmTitle, confirmMsg, confirmDanger, confirmCb,
+      // Form Modal
+      formModal,
+      // Categories
+      categories, catLoading, openCategoryForm, deleteCategory,
+      // Products
+      products, prodLoading, prodPage, prodPageSize, prodTotal, prodPages,
+      openProductForm, toggleProductStatus,
+      // Orders
+      orders, orderLoading, orderPage, orderPageSize, orderTotal, orderPages,
+      orderStatusFilter, orderStatusOptions, orderStatusLabel, orderStatusColor,
+      // After Sales
+      aftersales, aftersaleLoading, aftersalePage, aftersalePageSize, aftersaleTotal, aftersalePages,
+      aftersaleStatusFilter, aftersaleStatusOptions, aftersaleStatusLabel, aftersaleStatusColor, reviewAfterSale,
+      // Logistics
+      logisticsOrders, logisticsLoading, advanceLogistics,
+      // Users
+      usersList, usersLoading, usersPage, usersPageSize, usersTotal, usersPages,
+      // Utils
+      formatTime,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
