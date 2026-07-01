@@ -54,52 +54,52 @@ async def product_detail(product_id: int, db: AsyncSession = Depends(get_db)):
 
 # --- 以下为管理员接口 ---
 
-@router.post("/admin", response_model=ProductOut)
+@router.post("/admin")
 async def create_product(data: ProductCreate, auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     product = await product_service.create_product(
         db, name=data.name, description=data.description, price=data.price,
         image_url=data.image_url, stock=data.stock, category_id=data.category_id,
         status="on_sale",
     )
-    return ProductOut.model_validate(product)
+    return ResponseBase(data=ProductOut.model_validate(product).model_dump())
 
 
-@router.put("/admin/{product_id}", response_model=ProductOut)
+@router.put("/admin/{product_id}")
 async def update_product(product_id: int, data: ProductUpdate, auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
     product = await product_service.update_product(db, product_id, **update_data)
-    return ProductOut.model_validate(product)
+    return ResponseBase(data=ProductOut.model_validate(product).model_dump())
 
 
-@router.put("/admin/{product_id}/toggle-status", response_model=ProductOut)
+@router.put("/admin/{product_id}/toggle-status")
 async def toggle_status(product_id: int, auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     product = await product_service.toggle_product_status(db, product_id)
-    return ProductOut.model_validate(product)
+    return ResponseBase(data=ProductOut.model_validate(product).model_dump())
 
 
-@router.get("/admin/list", response_model=dict)
+@router.get("/admin/list")
 async def admin_list(auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db), page: int = 1, page_size: int = 20):
     products, total = await product_service.get_all_products_admin(db, page, page_size)
-    return {
+    return ResponseBase(data={
         "items": [ProductOut.model_validate(p).model_dump() for p in products],
         "total": total, "page": page, "page_size": page_size,
-    }
+    })
 
 
 # --- 分类管理（管理员） ---
 category_router = APIRouter(prefix="/categories", tags=["分类"])
 
 
-@category_router.post("/admin", response_model=dict)
+@category_router.post("/admin")
 async def create_category(data: dict, auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     category = await category_service.create_category(db, name=data["name"], parent_id=data.get("parent_id"))
-    return {"id": category.id, "name": category.name, "parent_id": category.parent_id}
+    return ResponseBase(data={"id": category.id, "name": category.name, "parent_id": category.parent_id})
 
 
-@category_router.put("/admin/{category_id}", response_model=dict)
+@category_router.put("/admin/{category_id}")
 async def update_category(category_id: int, data: dict, auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     category = await category_service.update_category(db, category_id, name=data.get("name"), parent_id=data.get("parent_id"))
-    return {"id": category.id, "name": category.name, "parent_id": category.parent_id}
+    return ResponseBase(data={"id": category.id, "name": category.name, "parent_id": category.parent_id})
 
 
 @category_router.delete("/admin/{category_id}")

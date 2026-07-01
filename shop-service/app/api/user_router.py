@@ -61,12 +61,12 @@ async def change_password(data: PasswordChange, user_id: int = Depends(get_curre
     return ResponseBase(message="密码修改成功")
 
 
-@router.get("/list", response_model=dict)
+@router.get("/list")
 async def list_users(auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db), page: int = 1, page_size: int = 20):
     users, total = await user_service.get_user_list(db, page, page_size)
-    return {
+    return ResponseBase(data={
         "items": [UserOut.model_validate(u).model_dump() for u in users],
         "total": total,
         "page": page,
         "page_size": page_size,
-    }
+    })
