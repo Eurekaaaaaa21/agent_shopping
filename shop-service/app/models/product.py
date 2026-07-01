@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Numeric, Text, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Numeric, Text, DateTime, ForeignKey
+from datetime import datetime, timezone
 from app.db.session import Base
 
 
@@ -13,5 +14,5 @@ class Product(Base):
     stock = Column(Integer, nullable=False, default=0)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     status = Column(String(20), nullable=False, default="on_sale")  # on_sale / off_sale
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

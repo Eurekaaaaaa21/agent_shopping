@@ -4,11 +4,32 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-# Convert postgresql:// to postgresql+asyncpg:// for async
-async_database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+# Auto-adapt: PostgreSQL for prod, SQLite for local dev without Docker
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgresql://"):
+    async_database_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+else:
+    async_database_url = db_url
 
-engine = create_async_engine(async_database_url, echo=settings.DEBUG, pool_size=10, max_overflow=20)
+engine = create_async_engine(
+    async_database_url,
+    echo=settings.DEBUG,
+    connect_args={"check_same_thread": False, "timeout": 30} if "sqlite" in async_database_url else {},
+)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+async def init_db():
+    """Initialize SQLite pragmas for better concurrency"""
+    if "sqlite" in async_database_url:
+        import aiosqlite
+        # Enable WAL mode for better concurrent read/write
+        async with aiosqlite.connect(
+            async_database_url.replace("sqlite+aiosqlite:///", "")
+        ) as db:
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA busy_timeout=5000")
+            await db.execute("PRAGMA synchronous=NORMAL")
 
 
 class Base(DeclarativeBase):

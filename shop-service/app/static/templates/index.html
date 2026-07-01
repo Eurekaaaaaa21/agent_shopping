@@ -878,11 +878,12 @@ createApp({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: loginForm.email, password: loginForm.password }),
         });
-        const data = await res.json();
-        if (data.code === 200 || data.access_token) {
-          token.value = data.access_token;
-          localStorage.setItem('token', data.access_token);
-          const u = data.user || {};
+        const json = await res.json();
+        const resp = json.data || json;  // 兼容 backend 返回 {code, data: {access_token, user}}
+        if (resp.access_token) {
+          token.value = resp.access_token;
+          localStorage.setItem('token', resp.access_token);
+          const u = resp.user || {};
           user.id = u.id || '';
           user.email = u.email || '';
           user.nickname = u.nickname || '';

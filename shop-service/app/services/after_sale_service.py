@@ -61,7 +61,7 @@ async def review_after_sale(db: AsyncSession, request_id: int, action: str, admi
     if action not in ("approved", "rejected", "completed"):
         raise BusinessException("操作类型只能是 approved/rejected/completed")
 
-    result = await db.execute(select(AfterSaleRequest).where(AfterSaleRequest.id == request_id).with_for_update())
+    result = await db.execute(select(AfterSaleRequest).where(AfterSaleRequest.id == request_id))
     request = result.scalar_one_or_none()
     if not request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="售后申请不存在")

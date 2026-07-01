@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Numeric, Text, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey
+from datetime import datetime, timezone
 from app.db.session import Base
 
 
@@ -10,8 +11,8 @@ class Order(Base):
     total_amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String(20), nullable=False, default="pending")  # pending / paid / cancelled
     shipping_address = Column(String(500), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class OrderItem(Base):
@@ -34,4 +35,4 @@ class PaymentRecord(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     method = Column(String(50), nullable=False, default="simulated")
     status = Column(String(20), nullable=False, default="success")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

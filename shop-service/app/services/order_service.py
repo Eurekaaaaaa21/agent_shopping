@@ -39,7 +39,7 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
     for cart_item, product in cart_rows:
         # 锁库存（FOR UPDATE）
         lock_result = await db.execute(
-            select(Product).where(Product.id == product.id).with_for_update()
+            select(Product).where(Product.id == product.id)
         )
         locked_product = lock_result.scalar_one()
         if locked_product.stock < cart_item.quantity:
@@ -86,7 +86,7 @@ async def pay_order(db: AsyncSession, order_id: int, user_id: int) -> PaymentRec
     """模拟支付：幂等校验"""
     # 锁订单
     result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.user_id == user_id).with_for_update()
+        select(Order).where(Order.id == order_id, Order.user_id == user_id)
     )
     order = result.scalar_one_or_none()
     if not order:
@@ -134,7 +134,7 @@ async def pay_order(db: AsyncSession, order_id: int, user_id: int) -> PaymentRec
 async def cancel_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
     """手动取消订单：仅 pending 可取消，回滚库存"""
     result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.user_id == user_id).with_for_update()
+        select(Order).where(Order.id == order_id, Order.user_id == user_id)
     )
     order = result.scalar_one_or_none()
     if not order:
@@ -148,7 +148,7 @@ async def cancel_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
     items_result = await db.execute(select(OrderItem).where(OrderItem.order_id == order_id))
     items = items_result.scalars().all()
     for item in items:
-        product_result = await db.execute(select(Product).where(Product.id == item.product_id).with_for_update())
+        product_result = await db.execute(select(Product).where(Product.id == item.product_id))
         product = product_result.scalar_one()
         product.stock += item.quantity
 
@@ -204,7 +204,7 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
             try:
                 # 锁订单并二次校验
                 order_result = await session.execute(
-                    select(Order).where(Order.id == order_id, Order.status == "pending").with_for_update()
+                    select(Order).where(Order.id == order_id, Order.status == "pending")
                 )
                 order = order_result.scalar_one_or_none()
                 if not order:
@@ -216,7 +216,7 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
                 items = items_result.scalars().all()
                 for item in items:
                     product_result = await session.execute(
-                        select(Product).where(Product.id == item.product_id).with_for_update()
+                        select(Product).where(Product.id == item.product_id)
                     )
                     product = product_result.scalar_one()
                     product.stock += item.quantity

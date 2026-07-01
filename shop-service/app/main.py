@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from app.core.config import get_settings
 from app.core.exceptions import BusinessException, business_exception_handler, general_exception_handler
 from app.core.middleware import RequestIdMiddleware
-from app.db.session import engine, Base, async_session_factory
+from app.db.session import engine, Base, async_session_factory, init_db
 from app.db.redis import init_redis, close_redis
 
 settings = get_settings()
@@ -56,6 +56,9 @@ async def lifespan(app: FastAPI):
 
     # 初始化 Redis
     await init_redis()
+
+    # 初始化 SQLite 性能优化
+    await init_db()
 
     # 创建数据库表
     async with engine.begin() as conn:
