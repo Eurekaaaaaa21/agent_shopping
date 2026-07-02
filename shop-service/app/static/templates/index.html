@@ -1524,7 +1524,7 @@ createApp({
         }
         const data = await res.json();
         if (data.code === 200 || res.ok) {
-          return data.data !== undefined ? data.data : data;
+          return data.data != null ? data.data : data;
         } else {
           showToast(data.message || '请求失败', 'error');
           return null;
