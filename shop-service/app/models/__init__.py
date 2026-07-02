@@ -5,6 +5,7 @@ from app.models.cart import CartItem
 from app.models.order import Order, OrderItem, PaymentRecord
 from app.models.logistics import LogisticsRecord
 from app.models.after_sale import AfterSaleRequest
+from app.models.address import Address
 
 __all__ = [
     "User",
@@ -16,4 +17,5 @@ __all__ = [
     "PaymentRecord",
     "LogisticsRecord",
     "AfterSaleRequest",
+    "Address",
 ]

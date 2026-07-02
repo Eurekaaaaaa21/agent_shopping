@@ -24,6 +24,7 @@ from app.api.order_router import router as order_router, admin_order_router
 from app.api.logistics_router import router as logistics_router, admin_logistics_router
 from app.api.after_sale_router import router as after_sale_router, admin_after_sale_router
 from app.api.internal_router import router as internal_router
+from app.api.address_router import router as address_router
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.services.order_service import cancel_timeout_orders
@@ -141,6 +142,7 @@ app.include_router(admin_logistics_router, prefix="/api/shop")
 app.include_router(after_sale_router, prefix="/api/shop")
 app.include_router(admin_after_sale_router, prefix="/api/shop")
 app.include_router(internal_router, prefix="/api/shop")
+app.include_router(address_router, prefix="/api/shop")
 
 
 # 健康检查

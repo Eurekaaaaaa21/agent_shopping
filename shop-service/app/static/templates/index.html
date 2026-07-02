@@ -471,7 +471,7 @@
           <div class="flex items-center gap-4">
             <span class="text-gray-600">合计：</span>
             <span class="text-2xl font-extrabold text-orange-500">&#165;{{ cartTotalAmount.toFixed(2) }}</span>
-            <button @click="showCheckout = true"
+            <button @click="openCheckout"
                     class="btn-primary px-6 py-2.5 text-white rounded-xl text-sm font-bold">
               去结算
             </button>
@@ -496,8 +496,15 @@
             </div>
           </div>
           <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-600 mb-1">收货地址</label>
-            <textarea v-model="checkoutAddress" rows="3" placeholder="请输入收货地址"
+            <label class="block text-sm font-medium text-gray-600 mb-1">选择收货地址</label>
+            <select v-model="checkoutAddressId" @change="onCheckoutAddressChange"
+                    class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white mb-2">
+              <option value="">-- 手写新地址 --</option>
+              <option v-for="addr in checkoutAddresses" :key="addr.id" :value="addr.id">
+                {{ addr.receiver_name }} {{ addr.phone }} - {{ addr.province }}{{ addr.city }}{{ addr.district }} {{ addr.detail }}
+              </option>
+            </select>
+            <textarea v-if="!checkoutAddressId" v-model="checkoutAddress" rows="3" placeholder="请输入收货地址"
                       class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 resize-none"></textarea>
           </div>
           <div class="flex justify-end gap-3">
@@ -710,6 +717,46 @@
         </div>
       </div>
 
+      <!-- Address Management -->
+      <div class="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-orange-100/50">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-gray-800">收货地址</h3>
+          <button @click="showAddressForm = true; editingAddress = null; resetAddressForm()"
+                  class="text-sm text-orange-500 hover:text-orange-600 font-medium transition">
+            + 添加地址
+          </button>
+        </div>
+        <div v-if="addressLoading" class="flex justify-center py-6"><div class="spinner"></div></div>
+        <div v-else-if="addresses.length === 0" class="text-center py-6 text-gray-400 text-sm">
+          暂无收货地址，点击上方按钮添加
+        </div>
+        <div v-else class="space-y-3">
+          <div v-for="addr in addresses" :key="addr.id"
+               class="border border-orange-100 rounded-xl p-4 hover:border-orange-200 transition">
+            <div class="flex items-start justify-between">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                  <span class="font-bold text-gray-800 text-sm">{{ addr.receiver_name }}</span>
+                  <span class="text-gray-400 text-xs">{{ addr.phone }}</span>
+                  <span v-if="addr.is_default" class="text-xs px-2 py-0.5 rounded-full bg-orange-50 text-orange-500 font-medium">默认</span>
+                </div>
+                <p class="text-sm text-gray-500 leading-relaxed truncate">
+                  {{ addr.province }}{{ addr.city }}{{ addr.district }} {{ addr.detail }}
+                </p>
+              </div>
+              <div class="flex items-center gap-1 shrink-0 ml-3">
+                <button v-if="!addr.is_default" @click="setDefaultAddress(addr.id)"
+                        class="text-xs text-gray-400 hover:text-orange-500 transition px-1.5 py-1 rounded">设默认</button>
+                <button @click="editAddress(addr)"
+                        class="text-xs text-gray-400 hover:text-blue-500 transition px-1.5 py-1 rounded">编辑</button>
+                <button @click="deleteAddress(addr.id)"
+                        class="text-xs text-gray-400 hover:text-red-500 transition px-1.5 py-1 rounded">删除</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Change Password -->
       <div class="bg-white rounded-2xl shadow-sm p-6 border border-orange-100/50">
         <h3 class="text-lg font-bold text-gray-800 mb-4">修改密码</h3>
@@ -737,6 +784,62 @@
       </div>
     </div>
   </main>
+
+  <!-- ==================== ADDRESS FORM MODAL ==================== -->
+  <transition name="modal">
+    <div v-if="showAddressForm" class="fixed inset-0 z-[8000] flex items-center justify-center bg-black/50 modal-backdrop" @click.self="showAddressForm=false">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
+        <h3 class="text-lg font-bold text-gray-800 mb-4">{{ editingAddress ? '编辑地址' : '添加地址' }}</h3>
+        <div class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">收货人</label>
+              <input v-model="addressForm.receiver_name" placeholder="姓名"
+                     class="input-shadow w-full px-3 py-2 border border-orange-200/60 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40"/>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">手机号</label>
+              <input v-model="addressForm.phone" placeholder="手机号"
+                     class="input-shadow w-full px-3 py-2 border border-orange-200/60 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40"/>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">省份</label>
+              <input v-model="addressForm.province" placeholder="省"
+                     class="input-shadow w-full px-3 py-2 border border-orange-200/60 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40"/>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">城市</label>
+              <input v-model="addressForm.city" placeholder="市"
+                     class="input-shadow w-full px-3 py-2 border border-orange-200/60 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40"/>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">区县</label>
+              <input v-model="addressForm.district" placeholder="区"
+                     class="input-shadow w-full px-3 py-2 border border-orange-200/60 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40"/>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">详细地址</label>
+            <input v-model="addressForm.detail" placeholder="街道、门牌号等"
+                   class="input-shadow w-full px-3 py-2 border border-orange-200/60 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40"/>
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" v-model="addressForm.is_default" class="w-4 h-4 rounded accent-orange-500"/>
+            <span class="text-sm text-gray-600">设为默认地址</span>
+          </label>
+        </div>
+        <div class="flex justify-end gap-3 mt-5">
+          <button @click="showAddressForm=false" class="px-4 py-2 text-sm rounded-xl border-2 border-gray-200 text-gray-600 hover:bg-gray-50 font-medium transition">取消</button>
+          <button @click="saveAddress" :disabled="addressSaving"
+                  class="btn-primary px-6 py-2 text-sm rounded-xl text-white font-bold">
+            {{ addressSaving ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
 
   <!-- ==================== PRODUCT DETAIL MODAL ==================== -->
   <transition name="modal">
@@ -1210,7 +1313,31 @@ createApp({
     // ==================== CHECKOUT ====================
     const showCheckout = ref(false);
     const checkoutAddress = ref('');
+    const checkoutAddressId = ref('');
+    const checkoutAddresses = ref([]);
     const checkoutLoading = ref(false);
+
+    async function openCheckout() {
+      showCheckout.value = true;
+      checkoutAddressId.value = '';
+      checkoutAddress.value = '';
+      // Load saved addresses for selection
+      try {
+        const res = await authFetch(API_BASE + '/users/me/addresses');
+        if (res) checkoutAddresses.value = Array.isArray(res) ? res : [];
+      } catch (e) { checkoutAddresses.value = []; }
+    }
+
+    function onCheckoutAddressChange() {
+      if (checkoutAddressId.value) {
+        const addr = checkoutAddresses.value.find(a => a.id == checkoutAddressId.value);
+        if (addr) {
+          checkoutAddress.value = addr.province + addr.city + addr.district + ' ' + addr.detail + '（' + addr.receiver_name + ' ' + addr.phone + '）';
+        }
+      } else {
+        checkoutAddress.value = '';
+      }
+    }
 
     async function submitOrder() {
       if (!checkoutAddress.value.trim()) return showToast('请填写收货地址', 'error');
@@ -1224,6 +1351,7 @@ createApp({
           showToast('下单成功', 'success');
           showCheckout.value = false;
           checkoutAddress.value = '';
+          checkoutAddressId.value = '';
           cartItems.value = [];
           goTo('orders');
           orderPage.value = 1;
@@ -1504,6 +1632,96 @@ createApp({
       }
     }
 
+    // ==================== ADDRESS ====================
+    const addresses = ref([]);
+    const addressLoading = ref(false);
+    const showAddressForm = ref(false);
+    const addressSaving = ref(false);
+    const editingAddress = ref(null);
+    const addressForm = reactive({
+      receiver_name: '', phone: '', province: '', city: '',
+      district: '', detail: '', is_default: false,
+    });
+
+    function resetAddressForm() {
+      addressForm.receiver_name = '';
+      addressForm.phone = '';
+      addressForm.province = '';
+      addressForm.city = '';
+      addressForm.district = '';
+      addressForm.detail = '';
+      addressForm.is_default = false;
+    }
+
+    async function fetchAddresses() {
+      addressLoading.value = true;
+      try {
+        const res = await authFetch(API_BASE + '/users/me/addresses');
+        if (res) addresses.value = Array.isArray(res) ? res : [];
+      } finally {
+        addressLoading.value = false;
+      }
+    }
+
+    async function saveAddress() {
+      const f = addressForm;
+      if (!f.receiver_name || !f.phone || !f.province || !f.city || !f.district || !f.detail) {
+        return showToast('请填写完整的地址信息', 'error');
+      }
+      addressSaving.value = true;
+      try {
+        const body = {
+          receiver_name: f.receiver_name, phone: f.phone,
+          province: f.province, city: f.city, district: f.district,
+          detail: f.detail, is_default: f.is_default,
+        };
+        const url = editingAddress.value
+          ? API_BASE + '/users/me/addresses/' + editingAddress.value.id
+          : API_BASE + '/users/me/addresses';
+        const method = editingAddress.value ? 'PUT' : 'POST';
+        const res = await authFetch(url, { method, body: JSON.stringify(body) });
+        if (res) {
+          showToast(editingAddress.value ? '地址已更新' : '地址已添加', 'success');
+          showAddressForm.value = false;
+          await fetchAddresses();
+        }
+      } catch (e) {
+        showToast('保存失败', 'error');
+      } finally {
+        addressSaving.value = false;
+      }
+    }
+
+    function editAddress(addr) {
+      editingAddress.value = addr;
+      addressForm.receiver_name = addr.receiver_name;
+      addressForm.phone = addr.phone;
+      addressForm.province = addr.province;
+      addressForm.city = addr.city;
+      addressForm.district = addr.district;
+      addressForm.detail = addr.detail;
+      addressForm.is_default = addr.is_default;
+      showAddressForm.value = true;
+    }
+
+    async function deleteAddress(addressId) {
+      showConfirm('确认删除', '确定要删除这个地址吗？', true, async () => {
+        const res = await authFetch(API_BASE + '/users/me/addresses/' + addressId, { method: 'DELETE' });
+        if (res) {
+          showToast('地址已删除', 'success');
+          await fetchAddresses();
+        }
+      });
+    }
+
+    async function setDefaultAddress(addressId) {
+      const res = await authFetch(API_BASE + '/users/me/addresses/' + addressId + '/default', { method: 'PUT' });
+      if (res) {
+        showToast('已设为默认地址', 'success');
+        await fetchAddresses();
+      }
+    }
+
     // ==================== HELPERS ====================
     async function authFetch(url, options = {}) {
       if (!token.value) {
@@ -1549,6 +1767,7 @@ createApp({
       if (page === 'aftersales') { aftersalesPage.value = 1; fetchAftersales(); }
       if (page === 'profile') {
         profileLoading.value = true;
+        fetchAddresses();
         fetchMe().finally(() => {
           profileLoading.value = false;
           profileForm.nickname = user.nickname || '';
@@ -1616,7 +1835,8 @@ createApp({
       updateCartQty, removeCartItem, fetchCart,
 
       // Checkout
-      showCheckout, checkoutAddress, checkoutLoading, submitOrder,
+      showCheckout, checkoutAddress, checkoutAddressId, checkoutAddresses, checkoutLoading,
+      openCheckout, onCheckoutAddressChange, submitOrder,
 
       // Orders
       orders, ordersLoading, orderFilterStatus, orderPage, orderPageSize,
@@ -1637,6 +1857,11 @@ createApp({
       // Profile
       profileLoading, profileSaving, profileForm, updateProfile,
       pwdSaving, pwdForm, changePassword,
+
+      // Address
+      addresses, addressLoading, showAddressForm, addressSaving,
+      editingAddress, addressForm, resetAddressForm, fetchAddresses,
+      saveAddress, editAddress, deleteAddress, setDefaultAddress,
 
       // Helpers
       goTo, navClass, mobileNavClass, formatTime,
