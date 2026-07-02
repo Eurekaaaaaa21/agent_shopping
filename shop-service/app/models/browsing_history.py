@@ -6,7 +6,7 @@ from app.db.session import Base
 class BrowsingHistory(Base):
     __tablename__ = "browsing_history"
     __table_args__ = (
-        UniqueConstraint("user_id", "product_id", name="uq_user_product"),
+        UniqueConstraint("user_id", "product_id", name="uq_browsing_history_user_product"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)

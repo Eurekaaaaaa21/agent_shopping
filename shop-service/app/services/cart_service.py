@@ -7,6 +7,12 @@ from app.models.cart import CartItem
 from app.models.product import Product
 from app.core.exceptions import BusinessException
 
+from datetime import datetime, timezone
+
+
+def naive_utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 async def get_cart(db: AsyncSession, user_id: int):
     """获取购物车（JOIN 商品信息）"""
@@ -40,18 +46,33 @@ async def add_to_cart(db: AsyncSession, user_id: int, product_id: int, quantity:
     p = product.scalar_one_or_none()
     if not p or p.status != "on_sale":
         raise BusinessException("商品不存在或已下架")
-    if p.stock < quantity:
-        raise BusinessException("库存不足")
+    if quantity <= 0:
+        raise BusinessException("数量必须大于0")
 
     existing = await db.execute(
         select(CartItem).where(CartItem.user_id == user_id, CartItem.product_id == product_id)
     )
     cart_item = existing.scalar_one_or_none()
+
     if cart_item:
-        cart_item.quantity += quantity
+        new_quantity = cart_item.quantity + quantity
+        if p.stock < new_quantity:
+            raise BusinessException("库存不足")
+        cart_item.quantity = new_quantity
+        cart_item.updated_at = naive_utc_now()
     else:
-        cart_item = CartItem(user_id=user_id, product_id=product_id, quantity=quantity)
+        if p.stock < quantity:
+            raise BusinessException("库存不足")
+        now = naive_utc_now()
+        cart_item = CartItem(
+            user_id=user_id,
+            product_id=product_id,
+            quantity=quantity,
+            created_at=now,
+            updated_at=now,
+        )
         db.add(cart_item)
+
     await db.flush()
     await db.refresh(cart_item)
     return cart_item
@@ -66,7 +87,16 @@ async def update_cart_item(db: AsyncSession, cart_item_id: int, user_id: int, qu
     cart_item = result.scalar_one_or_none()
     if not cart_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="购物车项不存在")
+
+    product_result = await db.execute(select(Product).where(Product.id == cart_item.product_id))
+    product = product_result.scalar_one_or_none()
+    if not product or product.status != "on_sale":
+        raise BusinessException("商品不存在或已下架")
+    if product.stock < quantity:
+        raise BusinessException("库存不足")
+
     cart_item.quantity = quantity
+    cart_item.updated_at = naive_utc_now()
     await db.flush()
     await db.refresh(cart_item)
     return cart_item

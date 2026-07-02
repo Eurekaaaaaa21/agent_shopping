@@ -1,6 +1,11 @@
 from sqlalchemy import Column, Integer, String, Numeric, Text, DateTime, ForeignKey
-from datetime import datetime, timezone
 from app.db.session import Base
+from datetime import datetime, timezone
+
+
+def utc_now_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 
 class Product(Base):
@@ -14,5 +19,5 @@ class Product(Base):
     stock = Column(Integer, nullable=False, default=0)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     status = Column(String(20), nullable=False, default="on_sale")  # on_sale / off_sale
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)

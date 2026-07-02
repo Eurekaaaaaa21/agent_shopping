@@ -11,6 +11,8 @@ from app.core.exceptions import BusinessException, business_exception_handler, g
 from app.core.middleware import RequestIdMiddleware
 from app.db.session import engine, Base, async_session_factory, init_db
 from app.db.redis import init_redis, close_redis
+from datetime import datetime, timezone
+
 
 settings = get_settings()
 
@@ -97,18 +99,22 @@ async def _init_admin():
         result = await session.execute(select(User).where(User.email == "admin@shop.com"))
         admin = result.scalar_one_or_none()
         if not admin:
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             admin = User(
                 email="admin@shop.com",
                 nickname="管理员",
                 hashed_password=hash_password("admin123"),
                 role="admin",
                 shipping_address="系统默认地址",
+                created_at=now,
+                updated_at=now,
             )
             session.add(admin)
             await session.commit()
             logger.info("Default admin created: admin@shop.com / admin123")
         else:
             logger.info("Admin account already exists")
+
 
 
 async def _run_migrations():

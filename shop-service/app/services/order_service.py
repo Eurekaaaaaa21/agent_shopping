@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
 from fastapi import HTTPException, status
+from decimal import Decimal
 
 from app.models.order import Order, OrderItem, PaymentRecord
 from app.models.cart import CartItem
@@ -33,7 +34,7 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
     if not cart_rows:
         raise BusinessException("购物车为空")
 
-    total_amount = 0.0
+    total_amount = Decimal("0.00")
     order_items_data = []
 
     for cart_item, product in cart_rows:
@@ -45,14 +46,15 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
         if locked_product.stock < cart_item.quantity:
             raise BusinessException(f"商品 [{locked_product.name}] 库存不足")
 
-        subtotal = float(locked_product.price) * cart_item.quantity
+        price = Decimal(str(locked_product.price))
+        subtotal = price * cart_item.quantity
         total_amount += subtotal
         order_items_data.append({
             "product_id": product.id,
             "product_name": locked_product.name,
-            "product_price": float(locked_product.price),
+            "product_price": price,
             "quantity": cart_item.quantity,
-            "subtotal": round(subtotal, 2),
+            "subtotal": subtotal,
         })
 
         # 扣减库存
@@ -61,7 +63,7 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
     # 创建订单
     order = Order(
         user_id=user_id,
-        total_amount=round(total_amount, 2),
+        total_amount=total_amount,
         status="pending",
         shipping_address=shipping_address,
     )
@@ -188,7 +190,7 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
     """超时订单自动取消，每条订单独立事务"""
     from app.db.session import async_session_factory
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=timeout_minutes)
     cancelled_count = 0
 
     # 先查出所有超时订单 ID（轻量查询，不锁）

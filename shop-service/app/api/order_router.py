@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 from typing import Optional
+import traceback
 
 from app.db.session import get_db
 from app.core.deps import get_current_user_id, require_admin
@@ -9,14 +11,50 @@ from app.schemas.order import OrderCreate, OrderOut, OrderDetail, PaymentOut, Or
 from app.schemas.common import ResponseBase
 from app.services import order_service
 
+
 router = APIRouter(prefix="/orders", tags=["订单"])
 
 
 @router.post("")
-async def create_order(data: OrderCreate, user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
-    order = await order_service.create_order(db, user_id, data.shipping_address)
-    return ResponseBase(data={"id": order.id, "total_amount": float(order.total_amount), "status": order.status})
+async def create_order(
+    data: OrderCreate,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        order = await order_service.create_order(db, user_id, data.shipping_address)
 
+        await db.commit()
+        await db.refresh(order)
+
+        return ResponseBase(
+            data={
+                "id": order.id,
+                "total_amount": float(order.total_amount),
+                "status": order.status,
+            },
+            message="订单创建成功"
+        )
+
+    except BusinessException as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except SQLAlchemyError as e:
+        await db.rollback()
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"数据库错误: {type(e).__name__}: {e}"
+        )
+
+    except Exception as e:
+        await db.rollback()
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"创建订单失败: {type(e).__name__}: {e}"
+        )
 
 @router.get("")
 async def list_orders(
