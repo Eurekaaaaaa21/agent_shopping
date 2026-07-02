@@ -1192,20 +1192,21 @@ createApp({
       // Form Modal
       formModal, handleFileChange,
       // Categories
-      categories, catLoading, openCategoryForm, deleteCategory,
+      categories, catLoading, loadCategories, openCategoryForm, deleteCategory,
       // Products
       products, prodLoading, prodPage, prodPageSize, prodTotal, prodPages,
-      openProductForm, toggleProductStatus,
+      loadProducts, openProductForm, toggleProductStatus,
       // Orders
       orders, orderLoading, orderPage, orderPageSize, orderTotal, orderPages,
-      orderStatusFilter, orderStatusOptions, orderStatusLabel, orderStatusColor,
+      loadOrders, orderStatusFilter, orderStatusOptions, orderStatusLabel, orderStatusColor,
       // After Sales
       aftersales, aftersaleLoading, aftersalePage, aftersalePageSize, aftersaleTotal, aftersalePages,
-      aftersaleStatusFilter, aftersaleStatusOptions, aftersaleStatusLabel, aftersaleStatusColor, reviewAfterSale,
+      loadAfterSales, aftersaleStatusFilter, aftersaleStatusOptions, aftersaleStatusLabel, aftersaleStatusColor, reviewAfterSale,
       // Logistics
-      logisticsOrders, logisticsLoading, advanceLogistics,
+      logisticsOrders, logisticsLoading, loadLogistics, advanceLogistics,
       // Users
       usersList, usersLoading, usersPage, usersPageSize, usersTotal, usersPages,
+      loadUsers,
       // Utils
       formatTime,
     };
