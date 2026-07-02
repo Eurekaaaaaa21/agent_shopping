@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -138,6 +139,12 @@ app.include_router(admin_logistics_router, prefix="/api/shop")
 app.include_router(after_sale_router, prefix="/api/shop")
 app.include_router(admin_after_sale_router, prefix="/api/shop")
 app.include_router(internal_router, prefix="/api/shop")
+
+# 确保上传目录存在
+os.makedirs("app/static/uploads/products", exist_ok=True)
+
+# 挂载上传文件静态目录
+app.mount("/uploads", StaticFiles(directory="app/static/uploads"), name="uploads")
 
 
 # 健康检查

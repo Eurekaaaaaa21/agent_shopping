@@ -1,3 +1,9 @@
+import base64
+import os
+import re
+import uuid
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -8,6 +14,27 @@ from app.core.exceptions import BusinessException
 from app.schemas.product import ProductCreate, ProductUpdate, ProductOut, ProductListItem
 from app.schemas.common import ResponseBase
 from app.services import product_service, category_service
+
+UPLOAD_DIR = Path("app/static/uploads/products")
+
+
+def _save_base64_image(image_url: Optional[str]) -> Optional[str]:
+    """将 base64 Data URL 保存为本地文件，返回访问路径"""
+    if not image_url or not image_url.startswith("data:image"):
+        return image_url
+    pattern = r"^data:image/(\w+);base64,(.+)"
+    match = re.match(pattern, image_url)
+    if not match:
+        return image_url
+    ext, b64_data = match.groups()
+    ext_map = {"jpeg": "jpg", "jpg": "jpg", "png": "png", "gif": "gif", "webp": "webp"}
+    file_ext = ext_map.get(ext, ext)
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4().hex}.{file_ext}"
+    filepath = UPLOAD_DIR / filename
+    with open(filepath, "wb") as f:
+        f.write(base64.b64decode(b64_data))
+    return f"/uploads/products/{filename}"
 
 router = APIRouter(prefix="/products", tags=["商品"])
 
@@ -56,9 +83,10 @@ async def product_detail(product_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/admin")
 async def create_product(data: ProductCreate, auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    image_url = _save_base64_image(data.image_url)
     product = await product_service.create_product(
         db, name=data.name, description=data.description, price=data.price,
-        image_url=data.image_url, stock=data.stock, category_id=data.category_id,
+        image_url=image_url, stock=data.stock, category_id=data.category_id,
         status="on_sale",
     )
     return ResponseBase(data=ProductOut.model_validate(product).model_dump())
@@ -67,6 +95,8 @@ async def create_product(data: ProductCreate, auth: dict = Depends(require_admin
 @router.put("/admin/{product_id}")
 async def update_product(product_id: int, data: ProductUpdate, auth: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "image_url" in update_data:
+        update_data["image_url"] = _save_base64_image(update_data["image_url"])
     product = await product_service.update_product(db, product_id, **update_data)
     return ResponseBase(data=ProductOut.model_validate(product).model_dump())
 
