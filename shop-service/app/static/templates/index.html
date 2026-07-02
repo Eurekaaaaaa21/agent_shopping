@@ -57,6 +57,15 @@
       animation: spin .7s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-sm {
+      border: 2px solid rgba(249, 115, 22, 0.15);
+      border-top-color: #F97316;
+      border-radius: 50%;
+      width: 14px;
+      height: 14px;
+      animation: spin .7s linear infinite;
+      display: inline-block;
+    }
     .toast-enter-active { animation: toastIn .3s ease; }
     .toast-leave-active { animation: toastOut .3s ease; }
     @keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -210,8 +219,9 @@
         <div class="flex items-center gap-3">
           <template v-if="isLoggedIn">
             <div class="hidden sm:flex items-center gap-2 text-sm text-white/90">
-              <div class="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30">
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+              <div class="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30 overflow-hidden">
+                <img v-if="user.avatar" :src="user.avatar" class="w-full h-full object-cover" alt="" />
+                <svg v-else class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
               </div>
               <span class="font-medium">{{ user.nickname || user.email || '用户' }}</span>
             </div>
@@ -399,6 +409,11 @@
         <div>
           <label class="block text-sm font-medium text-gray-600 mb-1">昵称</label>
           <input v-model="registerForm.nickname" type="text" placeholder="请输入昵称（选填）"
+                 class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 bg-white"/>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-600 mb-1">手机号</label>
+          <input v-model="registerForm.phone" type="tel" placeholder="请输入手机号（选填）"
                  class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 bg-white"/>
         </div>
         <div>
@@ -689,8 +704,19 @@
       <!-- Profile Info Card -->
       <div class="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-orange-100/50">
         <div class="flex items-center gap-4 mb-6">
-          <div class="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center">
-            <svg class="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          <div class="relative group cursor-pointer" @click="triggerAvatarUpload">
+            <div class="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center overflow-hidden border-2 border-orange-200 group-hover:border-orange-400 transition">
+              <img v-if="user.avatar" :src="user.avatar" class="w-full h-full object-cover" alt="" />
+              <svg v-else class="w-10 h-10 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            </div>
+            <div class="absolute inset-0 w-20 h-20 rounded-full bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+            </div>
+            <input type="file" ref="avatarInput" accept="image/png,image/jpeg,image/gif,image/webp"
+                   class="hidden" @change="onAvatarChange" />
+          </div>
+          <div v-if="avatarUploading" class="flex items-center gap-2 text-xs text-orange-500">
+            <div class="spinner-sm"></div> 上传中...
           </div>
           <div>
             <h2 class="text-lg font-bold text-gray-800">{{ user.nickname || '未设置昵称' }}</h2>
@@ -708,6 +734,11 @@
           <div>
             <label class="block text-sm font-medium text-gray-600 mb-1">昵称</label>
             <input v-model="profileForm.nickname" type="text" placeholder="请输入昵称"
+                   class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 bg-white"/>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1">手机号</label>
+            <input v-model="profileForm.phone" type="tel" placeholder="请输入手机号"
                    class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 bg-white"/>
           </div>
           <button @click="updateProfile" :disabled="profileSaving"
@@ -753,6 +784,48 @@
                         class="text-xs text-gray-400 hover:text-red-500 transition px-1.5 py-1 rounded">删除</button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Browsing History -->
+      <div class="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-orange-100/50">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-gray-800">浏览历史</h3>
+          <button v-if="historyItems.length > 0" @click="clearHistory"
+                  class="text-sm text-gray-400 hover:text-red-500 font-medium transition">
+            清空全部
+          </button>
+        </div>
+        <div v-if="historyLoading" class="flex justify-center py-6"><div class="spinner"></div></div>
+        <div v-else-if="historyItems.length === 0" class="text-center py-6 text-gray-400 text-sm">
+          暂无浏览记录，去逛逛商品吧～
+        </div>
+        <div v-else>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div v-for="h in historyItems" :key="h.id"
+                 class="relative group border border-orange-100 rounded-xl p-3 hover:border-orange-300 hover:shadow-sm transition cursor-pointer"
+                 @click="openProductDetail(h.product_id)">
+              <button @click.stop="deleteHistoryItem(h.id)"
+                      class="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-red-50 hover:text-red-400 opacity-0 group-hover:opacity-100 transition z-10">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+              <div class="w-full aspect-square bg-orange-50 rounded-lg overflow-hidden mb-2">
+                <img v-if="h.product_image" :src="h.product_image" class="w-full h-full object-cover" alt=""/>
+                <svg v-else class="w-full h-full p-4 text-orange-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </div>
+              <p class="text-xs font-medium text-gray-700 line-clamp-2 leading-relaxed">{{ h.product_name || '商品已下架' }}</p>
+              <p v-if="h.product_price" class="text-xs font-bold text-orange-500 mt-1">¥{{ h.product_price }}</p>
+              <p class="text-[10px] text-gray-400 mt-1">{{ formatTime(h.viewed_at) }}</p>
+            </div>
+          </div>
+          <!-- Pagination -->
+          <div v-if="historyTotalPages > 1" class="flex items-center justify-center gap-2 mt-4">
+            <button @click="historyPage--; fetchHistory()" :disabled="historyPage <= 1"
+                    class="px-3 py-1 text-xs rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition">上一页</button>
+            <span class="text-xs text-gray-400">{{ historyPage }} / {{ historyTotalPages }}</span>
+            <button @click="historyPage++; fetchHistory()" :disabled="historyPage >= historyTotalPages"
+                    class="px-3 py-1 text-xs rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-30 transition">下一页</button>
           </div>
         </div>
       </div>
@@ -926,7 +999,7 @@ createApp({
     const currentPage = ref('home');
     const isLoggedIn = ref(false);
     const token = ref('');
-    const user = reactive({ id: '', email: '', nickname: '', role: '' });
+    const user = reactive({ id: '', email: '', nickname: '', phone: '', avatar: '', role: '' });
 
     // Toast
     const toasts = ref([]);
@@ -970,7 +1043,7 @@ createApp({
     const authMode = ref('login');
     const authLoading = ref(false);
     const loginForm = reactive({ email: '', password: '' });
-    const registerForm = reactive({ email: '', nickname: '', password: '', confirmPassword: '' });
+    const registerForm = reactive({ email: '', nickname: '', password: '', confirmPassword: '', phone: '' });
 
     async function doLogin() {
       if (!loginForm.email || !loginForm.password) return showToast('请填写邮箱和密码', 'error');
@@ -990,8 +1063,10 @@ createApp({
           user.id = u.id || '';
           user.email = u.email || '';
           user.nickname = u.nickname || '';
+          user.phone = u.phone || '';
+          user.avatar = u.avatar || '';
           user.role = u.role || '';
-          localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, nickname: user.nickname, role: user.role }));
+          localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, nickname: user.nickname, phone: user.phone, avatar: user.avatar, role: user.role }));
           isLoggedIn.value = true;
           showToast('登录成功', 'success');
           loginForm.email = '';
@@ -1009,7 +1084,7 @@ createApp({
     }
 
     async function doRegister() {
-      const { email, nickname, password, confirmPassword } = registerForm;
+      const { email, nickname, password, confirmPassword, phone } = registerForm;
       if (!email || !password) return showToast('请填写邮箱和密码', 'error');
       if (password.length < 6) return showToast('密码至少6位', 'error');
       if (password !== confirmPassword) return showToast('两次密码不一致', 'error');
@@ -1018,7 +1093,7 @@ createApp({
         const res = await fetch(API_BASE + '/users/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, nickname: nickname || undefined, password }),
+          body: JSON.stringify({ email, nickname: nickname || undefined, password, phone: phone || undefined }),
         });
         const data = await res.json();
         if (data.code === 200 || data.id) {
@@ -1027,6 +1102,7 @@ createApp({
           loginForm.email = email;
           registerForm.email = '';
           registerForm.nickname = '';
+          registerForm.phone = '';
           registerForm.password = '';
           registerForm.confirmPassword = '';
         } else {
@@ -1046,6 +1122,8 @@ createApp({
         user.id = '';
         user.email = '';
         user.nickname = '';
+        user.phone = '';
+        user.avatar = '';
         user.role = '';
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -1063,8 +1141,10 @@ createApp({
           user.id = res.id || '';
           user.email = res.email || '';
           user.nickname = res.nickname || '';
+          user.phone = res.phone || '';
+          user.avatar = res.avatar || '';
           user.role = res.role || '';
-          localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, nickname: user.nickname, role: user.role }));
+          localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, nickname: user.nickname, phone: user.phone, avatar: user.avatar, role: user.role }));
         }
       } catch (e) { /* ignore */ }
     }
@@ -1217,6 +1297,8 @@ createApp({
         const res = await authFetch(API_BASE + '/products/' + id);
         if (res) {
           productDetail.value = res;
+          // 自动记录浏览历史（静默，不阻塞）
+          recordBrowsingHistory(id);
         } else {
           showToast('获取商品详情失败', 'error');
           showProductDetail.value = false;
@@ -1585,20 +1667,71 @@ createApp({
     // ==================== PROFILE ====================
     const profileLoading = ref(false);
     const profileSaving = ref(false);
-    const profileForm = reactive({ nickname: '' });
+    const profileForm = reactive({ nickname: '', phone: '' });
     const pwdSaving = ref(false);
     const pwdForm = reactive({ old_password: '', new_password: '', confirm_password: '' });
+
+    // Browsing history
+    const historyLoading = ref(false);
+    const historyItems = ref([]);
+    const historyPage = ref(1);
+    const historyPageSize = 12;
+    const historyTotal = ref(0);
+    const historyTotalPages = computed(() => Math.ceil(historyTotal.value / historyPageSize) || 1);
+
+    // Avatar upload
+    const avatarInput = ref(null);
+    const avatarUploading = ref(false);
+
+    function triggerAvatarUpload() {
+      avatarInput.value?.click();
+    }
+
+    async function onAvatarChange(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) {
+        showToast('仅支持 JPG/PNG/GIF/WebP 格式', 'error');
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('图片大小不能超过 2MB', 'error');
+        return;
+      }
+      avatarUploading.value = true;
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await authFetch(API_BASE + '/users/me/avatar', {
+          method: 'POST',
+          body: formData,
+          headers: {}, // 让浏览器自动设置 multipart boundary
+        });
+        if (res && res.avatar_url) {
+          user.avatar = res.avatar_url;
+          localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, nickname: user.nickname, phone: user.phone, avatar: user.avatar, role: user.role }));
+          showToast('头像上传成功', 'success');
+        }
+      } catch (e) {
+        showToast('上传失败，请重试', 'error');
+      } finally {
+        avatarUploading.value = false;
+        // 清空 input 以允许重复上传同一文件
+        e.target.value = '';
+      }
+    }
 
     async function updateProfile() {
       profileSaving.value = true;
       try {
         const res = await authFetch(API_BASE + '/users/me', {
           method: 'PUT',
-          body: JSON.stringify({ nickname: profileForm.nickname }),
+          body: JSON.stringify({ nickname: profileForm.nickname, phone: profileForm.phone || undefined }),
         });
         if (res) {
           user.nickname = profileForm.nickname;
-          localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, nickname: user.nickname, role: user.role }));
+          user.phone = profileForm.phone;
+          localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, nickname: user.nickname, phone: user.phone, avatar: user.avatar, role: user.role }));
           showToast('保存成功', 'success');
         }
       } catch (e) {
@@ -1722,6 +1855,63 @@ createApp({
       }
     }
 
+    // ==================== BROWSING HISTORY ====================
+    async function recordBrowsingHistory(productId) {
+      // 静默记录，不阻塞、不提示
+      try {
+        await authFetch(API_BASE + '/users/me/history', {
+          method: 'POST',
+          body: JSON.stringify({ product_id: productId }),
+        });
+      } catch (e) { /* silent */ }
+    }
+
+    async function fetchHistory() {
+      historyLoading.value = true;
+      try {
+        const res = await authFetch(
+          API_BASE + '/users/me/history?page=' + historyPage.value + '&page_size=' + historyPageSize
+        );
+        if (res) {
+          historyItems.value = res.items || [];
+          historyTotal.value = res.total || 0;
+        } else {
+          historyItems.value = [];
+        }
+      } catch (e) {
+        historyItems.value = [];
+      } finally {
+        historyLoading.value = false;
+      }
+    }
+
+    async function deleteHistoryItem(id) {
+      try {
+        await authFetch(API_BASE + '/users/me/history/' + id, { method: 'DELETE' });
+        showToast('已删除', 'success');
+        // 若当前页变空，回到上一页
+        if (historyItems.value.length === 1 && historyPage.value > 1) {
+          historyPage.value--;
+        }
+        await fetchHistory();
+      } catch (e) {
+        showToast('删除失败', 'error');
+      }
+    }
+
+    async function clearHistory() {
+      showConfirm('确定要清空全部浏览记录吗？', async () => {
+        try {
+          await authFetch(API_BASE + '/users/me/history', { method: 'DELETE' });
+          showToast('已清空', 'success');
+          historyPage.value = 1;
+          await fetchHistory();
+        } catch (e) {
+          showToast('清空失败', 'error');
+        }
+      });
+    }
+
     // ==================== HELPERS ====================
     async function authFetch(url, options = {}) {
       if (!token.value) {
@@ -1730,7 +1920,7 @@ createApp({
         return null;
       }
       const headers = { ...options.headers, Authorization: 'Bearer ' + token.value };
-      if (options.body && !headers['Content-Type']) {
+      if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
         headers['Content-Type'] = 'application/json';
       }
       try {
@@ -1768,9 +1958,12 @@ createApp({
       if (page === 'profile') {
         profileLoading.value = true;
         fetchAddresses();
+        historyPage.value = 1;
+        fetchHistory();
         fetchMe().finally(() => {
           profileLoading.value = false;
           profileForm.nickname = user.nickname || '';
+          profileForm.phone = user.phone || '';
         });
       }
     }
@@ -1801,6 +1994,8 @@ createApp({
             user.id = u.id || '';
             user.email = u.email || '';
             user.nickname = u.nickname || '';
+            user.phone = u.phone || '';
+            user.avatar = u.avatar || '';
             user.role = u.role || '';
           } catch (e) { /* ignore */ }
         }
@@ -1857,6 +2052,11 @@ createApp({
       // Profile
       profileLoading, profileSaving, profileForm, updateProfile,
       pwdSaving, pwdForm, changePassword,
+      avatarInput, avatarUploading, triggerAvatarUpload, onAvatarChange,
+
+      // Browsing History
+      historyLoading, historyItems, historyPage, historyTotalPages,
+      fetchHistory, deleteHistoryItem, clearHistory,
 
       // Address
       addresses, addressLoading, showAddressForm, addressSaving,

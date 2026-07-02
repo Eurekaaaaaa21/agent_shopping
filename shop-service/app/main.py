@@ -25,6 +25,7 @@ from app.api.logistics_router import router as logistics_router, admin_logistics
 from app.api.after_sale_router import router as after_sale_router, admin_after_sale_router
 from app.api.internal_router import router as internal_router
 from app.api.address_router import router as address_router
+from app.api.browsing_history_router import router as browsing_history_router
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.services.order_service import cancel_timeout_orders
@@ -65,6 +66,9 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created/verified")
+
+    # 数据库迁移（兼容已有 SQLite 库加列）
+    await _run_migrations()
 
     # 初始化管理员账号
     await _init_admin()
@@ -107,6 +111,27 @@ async def _init_admin():
             logger.info("Admin account already exists")
 
 
+async def _run_migrations():
+    """针对 SQLite 已有数据库的增量迁移（SQLAlchemy create_all 不会 ALTER TABLE）"""
+    if "sqlite" not in str(engine.url):
+        return
+    import aiosqlite
+    db_path = str(engine.url).replace("sqlite+aiosqlite:///", "")
+    async with aiosqlite.connect(db_path) as db:
+        # phone 列迁移
+        cursor = await db.execute("PRAGMA table_info(users)")
+        cols = await cursor.fetchall()
+        col_names = [c[1] for c in cols]
+        if "phone" not in col_names:
+            await db.execute("ALTER TABLE users ADD COLUMN phone VARCHAR(20)")
+            await db.commit()
+            logger.info("Migration: added phone column to users")
+        if "avatar" not in col_names:
+            await db.execute("ALTER TABLE users ADD COLUMN avatar VARCHAR(500)")
+            await db.commit()
+            logger.info("Migration: added avatar column to users")
+
+
 # 创建 FastAPI 应用
 app = FastAPI(
     title=settings.APP_NAME,
@@ -143,6 +168,13 @@ app.include_router(after_sale_router, prefix="/api/shop")
 app.include_router(admin_after_sale_router, prefix="/api/shop")
 app.include_router(internal_router, prefix="/api/shop")
 app.include_router(address_router, prefix="/api/shop")
+app.include_router(browsing_history_router, prefix="/api/shop")
+
+# 挂载静态文件目录（头像等资源）
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(os.path.join(static_dir, "avatars"), exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 # 健康检查

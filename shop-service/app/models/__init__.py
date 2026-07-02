@@ -6,6 +6,7 @@ from app.models.order import Order, OrderItem, PaymentRecord
 from app.models.logistics import LogisticsRecord
 from app.models.after_sale import AfterSaleRequest
 from app.models.address import Address
+from app.models.browsing_history import BrowsingHistory
 
 __all__ = [
     "User",
@@ -18,4 +19,5 @@ __all__ = [
     "LogisticsRecord",
     "AfterSaleRequest",
     "Address",
+    "BrowsingHistory",
 ]

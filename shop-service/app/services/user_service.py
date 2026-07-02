@@ -17,7 +17,7 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> Optional[User]:
     return result.scalar_one_or_none()
 
 
-async def create_user(db: AsyncSession, email: str, nickname: str, password: str) -> User:
+async def create_user(db: AsyncSession, email: str, nickname: str, password: str, phone: Optional[str] = None) -> User:
     existing = await get_user_by_email(db, email)
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该邮箱已注册")
@@ -26,6 +26,7 @@ async def create_user(db: AsyncSession, email: str, nickname: str, password: str
         nickname=nickname,
         hashed_password=hash_password(password),
         role="user",
+        phone=phone,
     )
     db.add(user)
     await db.flush()
@@ -55,12 +56,16 @@ async def update_user_address(db: AsyncSession, user_id: int, address: str) -> U
     return user
 
 
-async def update_user_info(db: AsyncSession, user_id: int, nickname: Optional[str] = None) -> User:
+async def update_user_info(db: AsyncSession, user_id: int, nickname: Optional[str] = None, phone: Optional[str] = None, avatar: Optional[str] = None) -> User:
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     if nickname:
         user.nickname = nickname
+    if phone is not None:
+        user.phone = phone if phone else None
+    if avatar is not None:
+        user.avatar = avatar if avatar else None
     await db.flush()
     await db.refresh(user)
     return user
