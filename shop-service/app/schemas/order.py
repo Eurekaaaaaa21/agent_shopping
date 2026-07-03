@@ -27,6 +27,7 @@ class OrderOut(BaseModel):
     shipping_address: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    items: list[OrderItemOut] = []
 
     class Config:
         from_attributes = True

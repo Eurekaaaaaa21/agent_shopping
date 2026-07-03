@@ -1,4 +1,5 @@
 import json
+from sqlalchemy.orm import selectinload
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -159,19 +160,27 @@ async def cancel_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
     return order
 
 
-async def get_user_orders(db: AsyncSession, user_id: int, status_filter: Optional[str] = None, page: int = 1, page_size: int = 20):
-    query = select(Order).where(Order.user_id == user_id)
+async def get_user_orders(
+    db: AsyncSession,
+    user_id: int,
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    query = (
+        select(Order)
+        .options(selectinload(Order.items))  # 预加载商品明细
+        .where(Order.user_id == user_id)
+    )
     count_query = select(func.count()).select_from(Order).where(Order.user_id == user_id)
     if status_filter:
         query = query.where(Order.status == status_filter)
         count_query = count_query.where(Order.status == status_filter)
     query = query.order_by(Order.id.desc()).offset((page - 1) * page_size).limit(page_size)
-
     result = await db.execute(query)
     orders = result.scalars().all()
     total = (await db.execute(count_query)).scalar()
     return orders, total
-
 
 async def get_order_detail(db: AsyncSession, order_id: int, user_id: int):
     order_result = await db.execute(
@@ -232,8 +241,17 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
     return cancelled_count
 
 
-async def get_all_orders_admin(db: AsyncSession, status_filter: Optional[str] = None, page: int = 1, page_size: int = 20):
-    query = select(Order).order_by(Order.id.desc())
+async def get_all_orders_admin(
+    db: AsyncSession,
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    query = (
+        select(Order)
+        .options(selectinload(Order.items)) 
+        .order_by(Order.id.desc())
+    )
     count_query = select(func.count()).select_from(Order)
     if status_filter:
         query = query.where(Order.status == status_filter)

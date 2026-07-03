@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.db.session import Base
 
@@ -9,7 +10,6 @@ def utc_now_naive():
 
 class Order(Base):
     __tablename__ = "orders"
-
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     total_amount = Column(Numeric(10, 2), nullable=False)
@@ -17,6 +17,8 @@ class Order(Base):
     shipping_address = Column(String(500), nullable=False)
     created_at = Column(DateTime, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
+    # 关联 order_items 表
+    items = relationship("OrderItem", back_populates="order", lazy="noload")
 
 
 class OrderItem(Base):
@@ -29,6 +31,7 @@ class OrderItem(Base):
     product_price = Column(Numeric(10, 2), nullable=False)
     quantity = Column(Integer, nullable=False)
     subtotal = Column(Numeric(10, 2), nullable=False)
+    order = relationship("Order", back_populates="items", lazy="noload")
 
 
 class PaymentRecord(Base):

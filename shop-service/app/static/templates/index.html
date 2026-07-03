@@ -758,21 +758,39 @@
             <span class="text-sm text-gray-400">{{ formatTime(order.created_at) }}</span>
           </div>
           <div class="p-4">
-            <div class="flex gap-4" v-for="item in (order.items || [])" :key="item.id">
-              <div class="w-16 h-16 bg-orange-50 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
-                <img v-if="item.product && item.product.image" :src="item.product.image"
-                  class="w-full h-full object-cover" />
-                <svg v-else class="w-6 h-6 text-orange-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+            <!-- 有商品列表时展示 -->
+            <template v-if="order.items && order.items.length > 0">
+              <div class="flex gap-3 mb-2" v-for="item in order.items" :key="item.id">
+                <!-- 商品图片 -->
+                <div
+                  class="w-16 h-16 bg-orange-50 rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-orange-100">
+                  <img v-if="item.product && item.product.image" :src="item.product.image" :alt="item.product.name"
+                    class="w-full h-full object-cover" /><svg v-else class="w-7 h-7 text-orange-200" fill="none"
+                    stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <!-- 商品信息 -->
+                <div class="flex-1 min-w-0 flex flex-col justify-center">
+                  <p class="text-sm font-medium text-gray-800 truncate">
+                    {{ item.product ? item.product.name : (item.product_name || '商品') }}
+                  </p>
+                  <div class="flex items-center gap-3 mt-1">
+                    <span class="text-xs text-gray-400">x{{ item.quantity || 1 }}</span>
+                    <span class="text-xs font-semibold text-orange-500">¥{{ Number(item.price || (item.product &&
+                      item.product.price) || 0).toFixed(2) }}
+                    </span>
+                    <span v-if="item.subtotal" class="text-xs text-gray-400">
+                      小计 ¥{{ Number(item.subtotal).toFixed(2) }}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div class="flex-1">
-                <p class="text-sm font-medium text-gray-800">{{ item.product ? item.product.name : '商品' }}</p>
-                <p class="text-xs text-gray-400">x{{ item.quantity }} &nbsp; &#165;{{ item.price || (item.product &&
-                  item.product.price) || '0.00' }}</p>
-              </div>
-            </div>
+            </template>
+
+            <!-- 没有商品信息时的占位 -->
+            <div v-else class="py-2 text-xs text-gray-400italic">暂无商品信息</div>
             <div class="flex items-center justify-between mt-4 pt-3 border-t border-orange-50">
               <span class="text-sm text-gray-500">共 {{ orderItemsCount(order) }} 件</span>
               <div class="flex items-center gap-2">
@@ -1250,14 +1268,25 @@
         function showConfirm(title, message, onConfirm, danger = false) {
           return new Promise((resolve) => {
             confirmDialog.show = true;
-            confirmDialog.title = title;
-            confirmDialog.message = message;
-            confirmDialog.danger = danger;
-            confirmDialog.onConfirm = () => {
+            confirmDialog.title = title || '提示';
+            confirmDialog.message = message || '';
+            confirmDialog.danger = !!danger;
+
+            confirmDialog.onConfirm = async () => {
               confirmDialog.show = false;
-              onConfirm();
-              resolve(true);
+
+              try {
+                if (typeof onConfirm === 'function') {
+                  await onConfirm();
+                }
+                resolve(true);
+              } catch (e) {
+                console.error('确认操作执行失败:', e);
+                showToast('操作失败，请重试', 'error');
+                resolve(false);
+              }
             };
+
             confirmDialog.onCancel = () => {
               confirmDialog.show = false;
               resolve(false);
@@ -1618,6 +1647,7 @@
           }
         }
 
+
         // ==================== CHECKOUT ====================
         const showCheckout = ref(false);
         const checkoutAddress = ref('');
@@ -1777,6 +1807,27 @@
           { label: '已取消', value: 'cancelled' },
         ];
 
+        // 规范化订单商品数据，兼容后端返回的扁平结构和嵌套结构
+        function normalizeOrderItems(items) {
+          if (!Array.isArray(items) || items.length === 0) return [];
+          return items.map(item => ({
+            ...item,
+            // 映射单价字段，优先使用已有的 price，否则使用 product_price
+            price: item.price ?? item.product_price ?? item.unit_price ?? '0.00',
+            // 如果后端已经返回了嵌套的 product 对象就直接用，否则自行组装
+            product: item.product ?? {
+              id: item.product_id,
+              name: item.product_name || '未知商品',
+              price: item.product_price ?? item.unit_price ?? '0.00',
+              //尝试多种可能的图片字段名
+              image: item.product_image_url
+                || item.product_image
+                || item.image_url
+                || null,
+            }
+          }));
+        }
+
         async function fetchOrders() {
           if (!isLoggedIn.value) return;
           ordersLoading.value = true;
@@ -1787,20 +1838,32 @@
             params.set('page_size', orderPageSize.value);
             const res = await authFetch(API_BASE + '/orders?' + params.toString());
             if (res) {
-              const d = res;
-              if (d && Array.isArray(d.items)) {
-                orders.value = d.items;
-                orderTotal.value = d.total || d.items.length;
-              } else if (Array.isArray(d)) {
-                orders.value = d;
-                orderTotal.value = d.length;
-              } else if (d && d.records) {
-                orders.value = d.records;
-                orderTotal.value = d.total || 0;
+              let rawOrders = [];
+
+              if (res && Array.isArray(res.items)) {
+                // 分页格式：{ items: [...], total: n }
+                rawOrders = res.items; orderTotal.value = res.total || res.items.length;
+              } else if (Array.isArray(res)) {
+                // 数组格式
+                rawOrders = res;
+                orderTotal.value = res.length;
+              } else if (res && Array.isArray(res.records)) {
+                rawOrders = res.records;
+                orderTotal.value = res.total || 0;
               } else {
-                orders.value = Array.isArray(d) ? d : [];
-                orderTotal.value = orders.value.length;
+                rawOrders = [];
+                orderTotal.value = 0;
               }
+
+              // 规范化每个订单的商品列表，兼容后端扁平字段
+              orders.value = rawOrders.map(order => ({
+                ...order,
+                items: normalizeOrderItems(
+                  order.items           // 标准字段
+                  || order.order_items  // 有些后端用这个字段名
+                  || []
+                )
+              }));
             }
           } catch (e) {
             orders.value = [];
@@ -1808,6 +1871,7 @@
             ordersLoading.value = false;
           }
         }
+
 
         function orderStatusLabel(status) {
           const map = { pending: '待支付', paid: '已支付', shipped: '已发货', completed: '已完成', cancelled: '已取消' };
@@ -1826,8 +1890,8 @@
         }
 
         function orderItemsCount(order) {
-          if (!order.items) return 0;
-          return order.items.reduce((sum, i) => sum + (i.quantity || 1), 0);
+          if (!order.items || order.items.length === 0) return 0;
+          return order.items.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
         }
 
         function canPay(order) { return order.status === 'pending'; }
@@ -1836,14 +1900,25 @@
         function canAfterSale(order) { return order.status === 'completed' || order.status === 'paid'; }
 
         async function payOrder(orderId) {
-          const ok = await showConfirm('确认支付', '确定要支付该订单吗？', () => { });
+          const ok = await showConfirm(
+            '确认支付',
+            '确定要支付该订单吗？',
+            null,
+            false
+          );
+
           if (!ok) return;
+
           loading.value = true;
+
           try {
-            const res = await authFetch(API_BASE + '/orders/' + orderId + '/pay', { method: 'POST' });
-            if (res) {
+            const res = await authFetch(API_BASE + '/orders/' + orderId + '/pay', {
+              method: 'POST'
+            });
+
+            if (res !== null) {
               showToast('支付成功', 'success');
-              fetchOrders();
+              await fetchOrders();
             }
           } catch (e) {
             showToast('支付失败', 'error');
@@ -1851,6 +1926,7 @@
             loading.value = false;
           }
         }
+
 
         async function cancelOrder(orderId) {
           const ok = await showConfirm('取消订单', '确定要取消该订单吗？此操作不可恢复。', () => { }, true);
@@ -1868,6 +1944,7 @@
             loading.value = false;
           }
         }
+
 
         // ==================== LOGISTICS ====================
         const showLogistics = ref(false);
@@ -2149,14 +2226,29 @@
         }
 
         async function deleteAddress(addressId) {
-          showConfirm('确认删除', '确定要删除这个地址吗？', true, async () => {
-            const res = await authFetch(API_BASE + '/users/me/addresses/' + addressId, { method: 'DELETE' });
-            if (res) {
+          const ok = await showConfirm(
+            '确认删除',
+            '确定要删除这个地址吗？',
+            null,
+            true
+          );
+
+          if (!ok) return;
+
+          try {
+            const res = await authFetch(API_BASE + '/users/me/addresses/' + addressId, {
+              method: 'DELETE'
+            });
+
+            if (res !== null) {
               showToast('地址已删除', 'success');
               await fetchAddresses();
             }
-          });
+          } catch (e) {
+            showToast('删除失败', 'error');
+          }
         }
+
 
         async function setDefaultAddress(addressId) {
           const res = await authFetch(API_BASE + '/users/me/addresses/' + addressId + '/default', { method: 'PUT' });
