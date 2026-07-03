@@ -27,6 +27,8 @@ class OrderOut(BaseModel):
     shipping_address: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    paid_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

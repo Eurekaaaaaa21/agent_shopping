@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Text, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Numeric, Text, DateTime, ForeignKey, Index, func
 from app.db.session import Base
 
 
@@ -12,6 +12,13 @@ class Order(Base):
     shipping_address = Column(String(500), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_orders_status", "status"),
+        Index("idx_orders_pending_time", "created_at", postgresql_where=(status == "pending")),
+    )
 
 
 class OrderItem(Base):
@@ -24,6 +31,7 @@ class OrderItem(Base):
     product_price = Column(Numeric(10, 2), nullable=False)  # 快照
     quantity = Column(Integer, nullable=False)
     subtotal = Column(Numeric(10, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class PaymentRecord(Base):

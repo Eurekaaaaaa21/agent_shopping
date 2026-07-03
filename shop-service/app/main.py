@@ -66,7 +66,15 @@ async def lifespan(app: FastAPI):
     await _init_admin()
 
     # 启动定时任务
-    scheduler.add_job(timeout_order_job, "interval", minutes=5, id="cancel_timeout_orders")
+    scheduler.add_job(
+        timeout_order_job,
+        "interval",
+        minutes=5,
+        id="cancel_timeout_orders",
+        misfire_grace_time=60,
+        coalesce=True,
+        max_instances=1,
+    )
     scheduler.start()
     logger.info("Scheduler started")
 

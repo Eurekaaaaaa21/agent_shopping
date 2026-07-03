@@ -13,9 +13,15 @@ router = APIRouter(prefix="/internal", tags=["内部接口"])
 
 
 @router.get("/orders")
-async def internal_orders(user_id: int = Depends(get_current_user_id), db: AsyncSession = Depends(get_db)):
+async def internal_orders(
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """内部接口：查询当前用户订单列表（ai-service 调用）"""
-    orders, total = await order_service.get_user_orders(db, user_id)
+    orders, total = await order_service.get_user_orders(db, user_id, status, page, page_size)
     items = []
     for o in orders:
         items_result = await db.execute(select(OrderItem).where(OrderItem.order_id == o.id))
@@ -25,7 +31,9 @@ async def internal_orders(user_id: int = Depends(get_current_user_id), db: Async
             "total_amount": float(o.total_amount),
             "status": o.status,
             "shipping_address": o.shipping_address,
-            "created_at": str(o.created_at) if o.created_at else None,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+            "paid_at": o.paid_at.isoformat() if o.paid_at else None,
+            "cancelled_at": o.cancelled_at.isoformat() if o.cancelled_at else None,
             "items": [
                 {
                     "product_id": i.product_id,
@@ -37,7 +45,40 @@ async def internal_orders(user_id: int = Depends(get_current_user_id), db: Async
                 for i in order_items
             ],
         })
-    return ResponseBase(data=items)
+    return ResponseBase(data={"items": items, "total": total, "page": page, "page_size": page_size})
+
+
+@router.get("/orders/{order_id}")
+async def internal_order_detail(
+    order_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """内部接口：单笔订单详情（ai-service 调用），复用已有归属校验"""
+    order, items = await order_service.get_order_detail(db, order_id, user_id)
+    return ResponseBase(data={
+        "order": {
+            "id": order.id,
+            "total_amount": float(order.total_amount),
+            "status": order.status,
+            "shipping_address": order.shipping_address,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+            "cancelled_at": order.cancelled_at.isoformat() if order.cancelled_at else None,
+        },
+        "items": [
+            {
+                "id": i.id,
+                "product_id": i.product_id,
+                "product_name": i.product_name,
+                "product_price": float(i.product_price),
+                "quantity": i.quantity,
+                "subtotal": float(i.subtotal),
+                "created_at": i.created_at.isoformat() if i.created_at else None,
+            }
+            for i in items
+        ],
+    })
 
 
 @router.get("/logistics")

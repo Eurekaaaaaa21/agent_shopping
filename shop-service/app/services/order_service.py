@@ -1,8 +1,10 @@
 import json
+import logging
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
+from sqlalchemy.orm.attributes import flag_modified
 from fastapi import HTTPException, status
 
 from app.models.order import Order, OrderItem, PaymentRecord
@@ -11,6 +13,8 @@ from app.models.product import Product
 from app.models.user import User
 from app.models.logistics import LogisticsRecord
 from app.core.exceptions import BusinessException
+
+logger = logging.getLogger(__name__)
 
 
 async def create_order(db: AsyncSession, user_id: int, shipping_address: Optional[str] = None) -> Order:
@@ -90,7 +94,7 @@ async def pay_order(db: AsyncSession, order_id: int, user_id: int) -> PaymentRec
     )
     order = result.scalar_one_or_none()
     if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="订单不存在")
+        raise BusinessException(detail="订单不存在", status_code=status.HTTP_404_NOT_FOUND)
     if order.status != "pending":
         if order.status == "paid":
             raise BusinessException("订单已支付，请勿重复支付")
@@ -105,6 +109,7 @@ async def pay_order(db: AsyncSession, order_id: int, user_id: int) -> PaymentRec
 
     # 更新订单状态
     order.status = "paid"
+    order.paid_at = datetime.now(timezone.utc)
 
     # 创建支付记录
     payment = PaymentRecord(
@@ -138,11 +143,13 @@ async def cancel_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
     )
     order = result.scalar_one_or_none()
     if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="订单不存在")
+        raise BusinessException(detail="订单不存在", status_code=status.HTTP_404_NOT_FOUND)
     if order.status != "pending":
         raise BusinessException(f"订单状态为 {order.status}，仅待支付订单可取消")
 
     order.status = "cancelled"
+    order.cancelled_at = datetime.now(timezone.utc)
+    flag_modified(order, "cancelled_at")
 
     # 回滚库存
     items_result = await db.execute(select(OrderItem).where(OrderItem.order_id == order_id))
@@ -163,7 +170,7 @@ async def get_user_orders(db: AsyncSession, user_id: int, status_filter: Optiona
     if status_filter:
         query = query.where(Order.status == status_filter)
         count_query = count_query.where(Order.status == status_filter)
-    query = query.order_by(Order.id.desc()).offset((page - 1) * page_size).limit(page_size)
+    query = query.order_by(Order.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
 
     result = await db.execute(query)
     orders = result.scalars().all()
@@ -212,6 +219,8 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
                     continue
 
                 order.status = "cancelled"
+                order.cancelled_at = datetime.now(timezone.utc)
+                flag_modified(order, "cancelled_at")
                 items_result = await session.execute(select(OrderItem).where(OrderItem.order_id == order_id))
                 items = items_result.scalars().all()
                 for item in items:
@@ -223,7 +232,9 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
 
                 await session.commit()
                 cancelled_count += 1
-            except Exception as e:
+                logger.info(f"超时取消订单成功: order_id={order_id}")
+            except Exception:
+                logger.exception(f"超时取消订单失败: order_id={order_id}")
                 await session.rollback()
                 continue
 
@@ -231,7 +242,7 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
 
 
 async def get_all_orders_admin(db: AsyncSession, status_filter: Optional[str] = None, page: int = 1, page_size: int = 20):
-    query = select(Order).order_by(Order.id.desc())
+    query = select(Order).order_by(Order.created_at.desc())
     count_query = select(func.count()).select_from(Order)
     if status_filter:
         query = query.where(Order.status == status_filter)
