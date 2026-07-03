@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
 class OrderCreate(BaseModel):
@@ -29,6 +30,7 @@ class OrderOut(BaseModel):
     updated_at: Optional[datetime] = None
     paid_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
+    items: list[OrderItemOut] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

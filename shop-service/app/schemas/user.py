@@ -7,6 +7,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     nickname: str
     password: str
+    phone: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -17,6 +18,8 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     nickname: Optional[str] = None
     shipping_address: Optional[str] = None
+    phone: Optional[str] = None
+    avatar: Optional[str] = None
 
 
 class PasswordChange(BaseModel):
@@ -29,6 +32,8 @@ class UserOut(BaseModel):
     email: str
     nickname: str
     role: str
+    phone: Optional[str] = None
+    avatar: Optional[str] = None
     shipping_address: Optional[str] = None
     created_at: Optional[datetime] = None
 

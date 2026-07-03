@@ -38,7 +38,7 @@ async def get_products(
         count_query = count_query.where(Product.category_id.in_(all_category_ids))
 
     if keyword:
-        filter_cond = Product.name.ilike(f"%{keyword}%")
+        filter_cond = func.lower(Product.name).contains(keyword.lower())
         query = query.where(filter_cond)
         count_query = count_query.where(filter_cond)
 
@@ -165,7 +165,7 @@ async def search_products_internal(db: AsyncSession, keyword: str):
     """内部接口：搜索商品（校验 JWT 后调用）"""
     result = await db.execute(
         select(Product)
-        .where(Product.name.ilike(f"%{keyword}%"))
+        .where(func.lower(Product.name).contains(keyword.lower()))
         .limit(20)
     )
     products = result.scalars().all()

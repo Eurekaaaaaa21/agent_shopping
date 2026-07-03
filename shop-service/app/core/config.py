@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database
-    DATABASE_URL: str = "postgresql://shop:shop123@localhost:5432/shop_db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./shop.db"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

@@ -9,8 +9,10 @@ from fastapi.responses import FileResponse
 from app.core.config import get_settings
 from app.core.exceptions import BusinessException, business_exception_handler, general_exception_handler
 from app.core.middleware import RequestIdMiddleware
-from app.db.session import engine, Base, async_session_factory
+from app.db.session import engine, Base, async_session_factory, init_db
 from app.db.redis import init_redis, close_redis
+from datetime import datetime, timezone
+
 
 settings = get_settings()
 
@@ -24,6 +26,8 @@ from app.api.order_router import router as order_router, admin_order_router
 from app.api.logistics_router import router as logistics_router, admin_logistics_router
 from app.api.after_sale_router import router as after_sale_router, admin_after_sale_router
 from app.api.internal_router import router as internal_router
+from app.api.address_router import router as address_router
+from app.api.browsing_history_router import router as browsing_history_router
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.services.order_service import cancel_timeout_orders
@@ -57,10 +61,16 @@ async def lifespan(app: FastAPI):
     # 初始化 Redis
     await init_redis()
 
+    # 初始化 SQLite 性能优化
+    await init_db()
+
     # 创建数据库表
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created/verified")
+
+    # 数据库迁移（兼容已有 SQLite 库加列）
+    await _run_migrations()
 
     # 初始化管理员账号
     await _init_admin()
@@ -97,18 +107,64 @@ async def _init_admin():
         result = await session.execute(select(User).where(User.email == "admin@shop.com"))
         admin = result.scalar_one_or_none()
         if not admin:
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             admin = User(
                 email="admin@shop.com",
                 nickname="管理员",
                 hashed_password=hash_password("admin123"),
                 role="admin",
                 shipping_address="系统默认地址",
+                created_at=now,
+                updated_at=now,
             )
             session.add(admin)
             await session.commit()
             logger.info("Default admin created: admin@shop.com / admin123")
         else:
             logger.info("Admin account already exists")
+
+
+
+async def _run_migrations():
+    """针对 SQLite 已有数据库的增量迁移（SQLAlchemy create_all 不会 ALTER TABLE）"""
+    if "sqlite" not in str(engine.url):
+        return
+    import aiosqlite
+    db_path = str(engine.url).replace("sqlite+aiosqlite:///", "")
+    async with aiosqlite.connect(db_path) as db:
+        # phone 列迁移
+        cursor = await db.execute("PRAGMA table_info(users)")
+        cols = await cursor.fetchall()
+        col_names = [c[1] for c in cols]
+        if "phone" not in col_names:
+            await db.execute("ALTER TABLE users ADD COLUMN phone VARCHAR(20)")
+            await db.commit()
+            logger.info("Migration: added phone column to users")
+        if "avatar" not in col_names:
+            await db.execute("ALTER TABLE users ADD COLUMN avatar VARCHAR(500)")
+            await db.commit()
+            logger.info("Migration: added avatar column to users")
+
+        cursor = await db.execute("PRAGMA table_info(orders)")
+        cols = await cursor.fetchall()
+        col_names = [c[1] for c in cols]
+        if col_names:
+            if "paid_at" not in col_names:
+                await db.execute("ALTER TABLE orders ADD COLUMN paid_at DATETIME")
+                await db.commit()
+                logger.info("Migration: added paid_at column to orders")
+            if "cancelled_at" not in col_names:
+                await db.execute("ALTER TABLE orders ADD COLUMN cancelled_at DATETIME")
+                await db.commit()
+                logger.info("Migration: added cancelled_at column to orders")
+
+        cursor = await db.execute("PRAGMA table_info(order_items)")
+        cols = await cursor.fetchall()
+        col_names = [c[1] for c in cols]
+        if col_names and "created_at" not in col_names:
+            await db.execute("ALTER TABLE order_items ADD COLUMN created_at DATETIME")
+            await db.commit()
+            logger.info("Migration: added created_at column to order_items")
 
 
 # 创建 FastAPI 应用
@@ -146,6 +202,14 @@ app.include_router(admin_logistics_router, prefix="/api/shop")
 app.include_router(after_sale_router, prefix="/api/shop")
 app.include_router(admin_after_sale_router, prefix="/api/shop")
 app.include_router(internal_router, prefix="/api/shop")
+app.include_router(address_router, prefix="/api/shop")
+app.include_router(browsing_history_router, prefix="/api/shop")
+
+# 挂载静态文件目录（头像等资源）
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(os.path.join(static_dir, "avatars"), exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 # 健康检查

@@ -1,4 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, func
+from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy.orm import relationship
+from datetime import datetime, timezone
 from app.db.session import Base
 
 
@@ -10,6 +12,11 @@ class User(Base):
     nickname = Column(String(100), nullable=False)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="user")  # user / admin
+    phone = Column(String(20), nullable=True)
+    avatar = Column(String(500), nullable=True)
     shipping_address = Column(String(500), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    addresses = relationship("Address", back_populates="user", lazy="select")
+    browsing_history = relationship("BrowsingHistory", back_populates="user", lazy="select")

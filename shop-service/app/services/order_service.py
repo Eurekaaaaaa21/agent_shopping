@@ -1,25 +1,26 @@
 import json
 import logging
-from typing import Optional
 from datetime import datetime, timedelta, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
-from sqlalchemy.orm.attributes import flag_modified
-from fastapi import HTTPException, status
+from decimal import Decimal
+from typing import Optional
 
-from app.models.order import Order, OrderItem, PaymentRecord
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.exceptions import BusinessException
 from app.models.cart import CartItem
+from app.models.logistics import LogisticsRecord
+from app.models.order import Order, OrderItem, PaymentRecord, utc_now_naive
 from app.models.product import Product
 from app.models.user import User
-from app.models.logistics import LogisticsRecord
-from app.core.exceptions import BusinessException
 
 logger = logging.getLogger(__name__)
 
 
 async def create_order(db: AsyncSession, user_id: int, shipping_address: Optional[str] = None) -> Order:
-    """创建订单：事务内锁库存 → 扣减 → 生成 pending 订单 → 清空购物车"""
-    # 获取用户地址
+    """创建订单：事务内锁库存、扣减库存、生成订单和明细、清空购物车。"""
     if not shipping_address:
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one_or_none()
@@ -27,7 +28,6 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
             raise BusinessException("请填写收货地址")
         shipping_address = user.shipping_address
 
-    # 获取购物车
     cart_result = await db.execute(
         select(CartItem, Product)
         .join(Product, CartItem.product_id == Product.id)
@@ -37,11 +37,10 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
     if not cart_rows:
         raise BusinessException("购物车为空")
 
-    total_amount = 0.0
+    total_amount = Decimal("0.00")
     order_items_data = []
 
     for cart_item, product in cart_rows:
-        # 锁库存（FOR UPDATE）
         lock_result = await db.execute(
             select(Product).where(Product.id == product.id).with_for_update()
         )
@@ -49,23 +48,24 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
         if locked_product.stock < cart_item.quantity:
             raise BusinessException(f"商品 [{locked_product.name}] 库存不足")
 
-        subtotal = float(locked_product.price) * cart_item.quantity
+        price = Decimal(str(locked_product.price))
+        subtotal = price * cart_item.quantity
         total_amount += subtotal
-        order_items_data.append({
-            "product_id": product.id,
-            "product_name": locked_product.name,
-            "product_price": float(locked_product.price),
-            "quantity": cart_item.quantity,
-            "subtotal": round(subtotal, 2),
-        })
+        order_items_data.append(
+            {
+                "product_id": product.id,
+                "product_name": locked_product.name,
+                "product_price": price,
+                "quantity": cart_item.quantity,
+                "subtotal": subtotal,
+            }
+        )
 
-        # 扣减库存
         locked_product.stock -= cart_item.quantity
 
-    # 创建订单
     order = Order(
         user_id=user_id,
-        total_amount=round(total_amount, 2),
+        total_amount=total_amount,
         status="pending",
         shipping_address=shipping_address,
     )
@@ -73,12 +73,9 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
     await db.flush()
     await db.refresh(order)
 
-    # 创建订单明细（快照）
     for item_data in order_items_data:
-        order_item = OrderItem(order_id=order.id, **item_data)
-        db.add(order_item)
+        db.add(OrderItem(order_id=order.id, **item_data))
 
-    # 清空购物车
     for cart_item, _ in cart_rows:
         await db.delete(cart_item)
 
@@ -87,8 +84,7 @@ async def create_order(db: AsyncSession, user_id: int, shipping_address: Optiona
 
 
 async def pay_order(db: AsyncSession, order_id: int, user_id: int) -> PaymentRecord:
-    """模拟支付：幂等校验"""
-    # 锁订单
+    """模拟支付：pending 订单支付成功后生成支付记录和物流记录。"""
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == user_id).with_for_update()
     )
@@ -100,18 +96,15 @@ async def pay_order(db: AsyncSession, order_id: int, user_id: int) -> PaymentRec
             raise BusinessException("订单已支付，请勿重复支付")
         raise BusinessException(f"订单状态为 {order.status}，无法支付")
 
-    # 检查是否已有支付记录
     existing_payment = await db.execute(
         select(PaymentRecord).where(PaymentRecord.order_id == order_id)
     )
     if existing_payment.scalar_one_or_none():
         raise BusinessException("订单已支付，请勿重复支付")
 
-    # 更新订单状态
     order.status = "paid"
-    order.paid_at = datetime.now(timezone.utc)
+    order.paid_at = utc_now_naive()
 
-    # 创建支付记录
     payment = PaymentRecord(
         order_id=order_id,
         amount=order.total_amount,
@@ -120,13 +113,19 @@ async def pay_order(db: AsyncSession, order_id: int, user_id: int) -> PaymentRec
     )
     db.add(payment)
 
-    # 创建物流记录（预置演示数据）
     logistics = LogisticsRecord(
         order_id=order_id,
         status="picked_up",
-        tracking_info=json.dumps([
-            {"status": "picked_up", "description": "包裹已揽收", "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")},
-        ], ensure_ascii=False),
+        tracking_info=json.dumps(
+            [
+                {
+                    "status": "picked_up",
+                    "description": "包裹已揽收",
+                    "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            ],
+            ensure_ascii=False,
+        ),
         estimated_delivery=(datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d"),
     )
     db.add(logistics)
@@ -137,7 +136,7 @@ async def pay_order(db: AsyncSession, order_id: int, user_id: int) -> PaymentRec
 
 
 async def cancel_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
-    """手动取消订单：仅 pending 可取消，回滚库存"""
+    """手动取消订单：仅 pending 订单可取消，并回滚库存。"""
     result = await db.execute(
         select(Order).where(Order.id == order_id, Order.user_id == user_id).with_for_update()
     )
@@ -148,14 +147,14 @@ async def cancel_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
         raise BusinessException(f"订单状态为 {order.status}，仅待支付订单可取消")
 
     order.status = "cancelled"
-    order.cancelled_at = datetime.now(timezone.utc)
-    flag_modified(order, "cancelled_at")
+    order.cancelled_at = utc_now_naive()
 
-    # 回滚库存
     items_result = await db.execute(select(OrderItem).where(OrderItem.order_id == order_id))
     items = items_result.scalars().all()
     for item in items:
-        product_result = await db.execute(select(Product).where(Product.id == item.product_id).with_for_update())
+        product_result = await db.execute(
+            select(Product).where(Product.id == item.product_id).with_for_update()
+        )
         product = product_result.scalar_one()
         product.stock += item.quantity
 
@@ -164,8 +163,18 @@ async def cancel_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
     return order
 
 
-async def get_user_orders(db: AsyncSession, user_id: int, status_filter: Optional[str] = None, page: int = 1, page_size: int = 20):
-    query = select(Order).where(Order.user_id == user_id)
+async def get_user_orders(
+    db: AsyncSession,
+    user_id: int,
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    query = (
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.user_id == user_id)
+    )
     count_query = select(func.count()).select_from(Order).where(Order.user_id == user_id)
     if status_filter:
         query = query.where(Order.status == status_filter)
@@ -180,11 +189,13 @@ async def get_user_orders(db: AsyncSession, user_id: int, status_filter: Optiona
 
 async def get_order_detail(db: AsyncSession, order_id: int, user_id: int):
     order_result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.user_id == user_id)
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id == order_id, Order.user_id == user_id)
     )
     order = order_result.scalar_one_or_none()
     if not order:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="订单不存在")
+        raise BusinessException(detail="订单不存在", status_code=status.HTTP_404_NOT_FOUND)
 
     items_result = await db.execute(select(OrderItem).where(OrderItem.order_id == order_id))
     items = items_result.scalars().all()
@@ -192,26 +203,25 @@ async def get_order_detail(db: AsyncSession, order_id: int, user_id: int):
 
 
 async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
-    """超时订单自动取消，每条订单独立事务"""
+    """超时订单自动取消，每条订单独立事务。"""
     from app.db.session import async_session_factory
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+    cutoff = utc_now_naive() - timedelta(minutes=timeout_minutes)
     cancelled_count = 0
 
-    # 先查出所有超时订单 ID（轻量查询，不锁）
     async with async_session_factory() as session:
         result = await session.execute(
             select(Order.id).where(Order.status == "pending", Order.created_at < cutoff)
         )
         order_ids = [row[0] for row in result.all()]
 
-    # 逐条处理，每条独立事务
     for order_id in order_ids:
         async with async_session_factory() as session:
             try:
-                # 锁订单并二次校验
                 order_result = await session.execute(
-                    select(Order).where(Order.id == order_id, Order.status == "pending").with_for_update()
+                    select(Order)
+                    .where(Order.id == order_id, Order.status == "pending")
+                    .with_for_update()
                 )
                 order = order_result.scalar_one_or_none()
                 if not order:
@@ -219,8 +229,8 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
                     continue
 
                 order.status = "cancelled"
-                order.cancelled_at = datetime.now(timezone.utc)
-                flag_modified(order, "cancelled_at")
+                order.cancelled_at = utc_now_naive()
+
                 items_result = await session.execute(select(OrderItem).where(OrderItem.order_id == order_id))
                 items = items_result.scalars().all()
                 for item in items:
@@ -232,22 +242,32 @@ async def cancel_timeout_orders(timeout_minutes: int = 30) -> int:
 
                 await session.commit()
                 cancelled_count += 1
-                logger.info(f"超时取消订单成功: order_id={order_id}")
+                logger.info("超时取消订单成功: order_id=%s", order_id)
             except Exception:
-                logger.exception(f"超时取消订单失败: order_id={order_id}")
+                logger.exception("超时取消订单失败: order_id=%s", order_id)
                 await session.rollback()
                 continue
 
     return cancelled_count
 
 
-async def get_all_orders_admin(db: AsyncSession, status_filter: Optional[str] = None, page: int = 1, page_size: int = 20):
-    query = select(Order).order_by(Order.created_at.desc())
+async def get_all_orders_admin(
+    db: AsyncSession,
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+):
+    query = (
+        select(Order)
+        .options(selectinload(Order.items))
+        .order_by(Order.created_at.desc())
+    )
     count_query = select(func.count()).select_from(Order)
     if status_filter:
         query = query.where(Order.status == status_filter)
         count_query = count_query.where(Order.status == status_filter)
     query = query.offset((page - 1) * page_size).limit(page_size)
+
     result = await db.execute(query)
     orders = result.scalars().all()
     total = (await db.execute(count_query)).scalar()
