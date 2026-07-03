@@ -17,8 +17,8 @@ async def create_after_sale(db: AsyncSession, user_id: int, order_id: int, type_
     order = order_result.scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="订单不存在")
-    if order.status != "paid":
-        raise BusinessException("仅已支付订单可申请售后")
+    if order.status not in ("paid", "shipped", "completed"):
+        raise BusinessException("仅已支付、已发货或已完成订单可申请售后")
 
     request = AfterSaleRequest(
         order_id=order_id,

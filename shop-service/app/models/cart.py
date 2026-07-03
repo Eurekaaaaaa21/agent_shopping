@@ -3,6 +3,10 @@ from datetime import datetime, timezone
 from app.db.session import Base
 
 
+def utc_now_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class CartItem(Base):
     __tablename__ = "cart_items"
     __table_args__ = (
@@ -13,5 +17,5 @@ class CartItem(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     quantity = Column(Integer, nullable=False, default=1)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)

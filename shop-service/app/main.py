@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,7 @@ from datetime import datetime, timezone
 
 
 settings = get_settings()
+BASE_DIR = Path(__file__).resolve().parent
 
 # 导入所有模型以确保 Base.metadata 包含所有表
 from app.models import *  # noqa: F401,F403
@@ -127,6 +129,18 @@ async def _init_admin():
 
 async def _run_migrations():
     """针对 SQLite 已有数据库的增量迁移（SQLAlchemy create_all 不会 ALTER TABLE）"""
+    if "postgresql" in str(engine.url):
+        from sqlalchemy import text
+
+        async with engine.begin() as conn:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar VARCHAR(500)"))
+            await conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP"))
+            await conn.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP"))
+            await conn.execute(text("ALTER TABLE order_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMP"))
+        logger.info("PostgreSQL migrations applied")
+        return
+
     if "sqlite" not in str(engine.url):
         return
     import aiosqlite
@@ -207,7 +221,7 @@ app.include_router(browsing_history_router, prefix="/api/shop")
 
 # 挂载静态文件目录（头像等资源）
 import os
-static_dir = os.path.join(os.path.dirname(__file__), "static")
+static_dir = BASE_DIR / "static"
 os.makedirs(os.path.join(static_dir, "avatars"), exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -220,12 +234,12 @@ async def health_check():
 
 @app.get("/", tags=["首页"])
 async def index():
-    return FileResponse("app/static/templates/index.html")
+    return FileResponse(BASE_DIR / "static" / "templates" / "index.html")
 
 
 @app.get("/admin", tags=["管理后台"])
 async def admin_page():
-    return FileResponse("app/static/templates/admin.html")
+    return FileResponse(BASE_DIR / "static" / "templates" / "admin.html")
 
 
 if __name__ == "__main__":

@@ -824,6 +824,40 @@
             class="px-3 py-1.5 rounded-lg text-sm border border-orange-200/60 text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-50 transition">下一页</button>
         </div>
       </div>
+
+      <!-- After-Sale Apply Modal: only opened from the orders page -->
+      <transition name="modal">
+        <div v-if="showAfterSaleForm"
+          class="fixed inset-0 z-[7000] flex items-center justify-center bg-black/50 modal-backdrop"
+          @click.self="closeAfterSaleForm">
+          <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4">申请售后</h2>
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">售后类型</label>
+                <select v-model="afterSaleForm.type"
+                  class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white">
+                  <option value="refund">仅退款</option>
+                  <option value="return">退货退款</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">申请原因</label>
+                <textarea v-model="afterSaleForm.reason" rows="4" placeholder="请描述申请原因"
+                  class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 resize-none"></textarea>
+              </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+              <button @click="closeAfterSaleForm"
+                class="px-4 py-2 text-sm rounded-xl border-2 border-gray-200 text-gray-600 hover:bg-gray-50 font-medium transition">取消</button>
+              <button @click="submitAfterSale" :disabled="afterSaleLoading"
+                class="btn-primary px-6 py-2 text-sm rounded-xl text-white font-bold">
+                {{ afterSaleLoading ? '提交中...' : '提交申请' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
     </main>
 
     <!-- ==================== AFTERSALES PAGE ==================== -->
@@ -878,41 +912,6 @@
             class="px-3 py-1.5 rounded-lg text-sm border border-orange-200/60 text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-orange-50 transition">下一页</button>
         </div>
       </div>
-
-      <!-- After-Sale Apply Modal -->
-      <transition name="modal">
-        <div v-if="showAfterSaleForm"
-          class="fixed inset-0 z-[7000] flex items-center justify-center bg-black/50 modal-backdrop"
-          @click.self="showAfterSaleForm=false">
-          <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
-            <h2 class="text-lg font-bold text-gray-800 mb-4">申请售后</h2>
-            <div class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-600 mb-1">售后类型</label>
-                <select v-model="afterSaleForm.type"
-                  class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 bg-white">
-                  <option value="refund">仅退款</option>
-                  <option value="return">退货退款</option>
-                  <option value="exchange">换货</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-600 mb-1">申请原因</label>
-                <textarea v-model="afterSaleForm.reason" rows="4" placeholder="请描述申请原因"
-                  class="input-shadow w-full px-4 py-2.5 border border-orange-200/60 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 resize-none"></textarea>
-              </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-              <button @click="showAfterSaleForm=false"
-                class="px-4 py-2 text-sm rounded-xl border-2 border-gray-200 text-gray-600 hover:bg-gray-50 font-medium transition">取消</button>
-              <button @click="submitAfterSale" :disabled="afterSaleLoading"
-                class="btn-primary px-6 py-2 text-sm rounded-xl text-white font-bold">
-                {{ afterSaleLoading ? '提交中...' : '提交申请' }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </transition>
     </main>
 
     <!-- ==================== PROFILE PAGE ==================== -->
@@ -1443,15 +1442,23 @@
           return pages;
         }
 
+        function normalizeProduct(product) {
+          if (!product) return product;
+          return {
+            ...product,
+            image: product.image || product.image_url || product.product_image_url || product.product_image || '',
+          };
+        }
+
         async function fetchHotProducts() {
           homeLoading.value = true;
           try {
             const res = await fetch(API_BASE + '/products/hot');
             const data = await res.json();
             if (data.code === 200) {
-              hotProducts.value = data.data || (Array.isArray(data) ? data : []);
+              hotProducts.value = (data.data || (Array.isArray(data) ? data : [])).map(normalizeProduct);
             } else {
-              hotProducts.value = Array.isArray(data) ? data : (data.data || []);
+              hotProducts.value = (Array.isArray(data) ? data : (data.data || [])).map(normalizeProduct);
             }
           } catch (e) {
             hotProducts.value = [];
@@ -1512,13 +1519,13 @@
             if (data.code === 200) {
               const d = data.data;
               if (d && Array.isArray(d.items)) {
-                searchProducts.value = d.items;
+                searchProducts.value = d.items.map(normalizeProduct);
                 searchTotal.value = d.total || d.items.length;
               } else if (Array.isArray(d)) {
-                searchProducts.value = d;
+                searchProducts.value = d.map(normalizeProduct);
                 searchTotal.value = d.length;
               } else {
-                searchProducts.value = d && d.records ? d.records : [];
+                searchProducts.value = (d && d.records ? d.records : []).map(normalizeProduct);
                 searchTotal.value = d && d.total ? d.total : 0;
               }
             } else {
@@ -1551,7 +1558,7 @@
           try {
             const res = await authFetch(API_BASE + '/products/' + id);
             if (res) {
-              productDetail.value = res;
+              productDetail.value = normalizeProduct(res);
               // 自动记录浏览历史（静默，不阻塞）
               recordBrowsingHistory(id);
             } else {
@@ -1896,8 +1903,8 @@
 
         function canPay(order) { return order.status === 'pending'; }
         function canCancel(order) { return order.status === 'pending'; }
-        function canTrack(order) { return order.status === 'shipped' || order.status === 'completed'; }
-        function canAfterSale(order) { return order.status === 'completed' || order.status === 'paid'; }
+        function canTrack(order) { return ['paid', 'shipped', 'completed'].includes(order.status); }
+        function canAfterSale(order) { return ['paid', 'shipped', 'completed'].includes(order.status); }
 
         async function payOrder(orderId) {
           const ok = await showConfirm(
@@ -1958,7 +1965,9 @@
           try {
             const res = await authFetch(API_BASE + '/logistics/' + orderId);
             if (res) {
-              logisticsData.value = Array.isArray(res) ? res : (res.traces || res.data || [res]);
+              logisticsData.value = Array.isArray(res)
+                ? res
+                : (res.tracking_info || res.traces || res.data || [res]);
             }
           } catch (e) {
             logisticsData.value = [];
@@ -1981,10 +1990,20 @@
         const afterSaleForm = reactive({ order_id: '', type: 'refund', reason: '' });
 
         function openAfterSaleForm(orderId) {
+          if (currentPage.value !== 'orders') {
+            currentPage.value = 'orders';
+          }
           afterSaleForm.order_id = orderId;
           afterSaleForm.type = 'refund';
           afterSaleForm.reason = '';
           showAfterSaleForm.value = true;
+        }
+
+        function closeAfterSaleForm() {
+          showAfterSaleForm.value = false;
+          afterSaleForm.order_id = '';
+          afterSaleForm.type = 'refund';
+          afterSaleForm.reason = '';
         }
 
         async function submitAfterSale() {
@@ -2001,7 +2020,7 @@
             });
             if (res) {
               showToast('申请已提交', 'success');
-              showAfterSaleForm.value = false;
+              closeAfterSaleForm();
               fetchAftersales();
             }
           } catch (e) {
@@ -2357,7 +2376,7 @@
           currentPage.value = page;
           if (page === 'cart') fetchCart();
           if (page === 'orders') { orderPage.value = 1; fetchOrders(); }
-          if (page === 'aftersales') { aftersalesPage.value = 1; fetchAftersales(); }
+          if (page === 'aftersales') { closeAfterSaleForm(); aftersalesPage.value = 1; fetchAftersales(); }
           if (page === 'profile') {
             profileLoading.value = true;
             fetchAddresses();
@@ -2452,7 +2471,7 @@
           aftersalesLoading, aftersalesList, aftersalesPage, aftersalesPageSize,
           aftersalesTotal, aftersalesTotalPages, visibleAftersalesPages,
           showAfterSaleForm, afterSaleLoading, afterSaleForm,
-          openAfterSaleForm, submitAfterSale, fetchAftersales, aftersaleStatusClass,
+          openAfterSaleForm, closeAfterSaleForm, submitAfterSale, fetchAftersales, aftersaleStatusClass,
 
           // Profile
           profileLoading, profileSaving, profileForm, updateProfile,

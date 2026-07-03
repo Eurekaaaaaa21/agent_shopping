@@ -3,6 +3,10 @@ from datetime import datetime, timezone
 from app.db.session import Base
 
 
+def utc_now_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class AfterSaleRequest(Base):
     __tablename__ = "after_sale_requests"
 
@@ -14,5 +18,5 @@ class AfterSaleRequest(Base):
     status = Column(String(20), nullable=False, default="pending")
     # pending / approved / rejected / completed
     admin_note = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)

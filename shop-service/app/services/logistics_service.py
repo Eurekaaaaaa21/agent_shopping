@@ -65,6 +65,11 @@ async def get_logistics_by_order_internal(db: AsyncSession, order_id: int, user_
 
 async def advance_logistics_status(db: AsyncSession, order_id: int):
     """管理员推进物流状态"""
+    order_result = await db.execute(select(Order).where(Order.id == order_id).with_for_update())
+    order = order_result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="订单不存在")
+
     result = await db.execute(select(LogisticsRecord).where(LogisticsRecord.order_id == order_id))
     record = result.scalar_one_or_none()
     if not record:
@@ -76,6 +81,10 @@ async def advance_logistics_status(db: AsyncSession, order_id: int):
 
     new_status = STATUS_FLOW[current_index + 1]
     record.status = new_status
+    if new_status in ("in_transit", "out_for_delivery"):
+        order.status = "shipped"
+    elif new_status == "delivered":
+        order.status = "completed"
 
     tracking_info = json.loads(record.tracking_info) if record.tracking_info else []
     tracking_info.append({

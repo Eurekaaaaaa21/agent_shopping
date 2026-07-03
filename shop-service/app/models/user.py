@@ -4,6 +4,10 @@ from datetime import datetime, timezone
 from app.db.session import Base
 
 
+def utc_now_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -15,8 +19,8 @@ class User(Base):
     phone = Column(String(20), nullable=True)
     avatar = Column(String(500), nullable=True)
     shipping_address = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
     addresses = relationship("Address", back_populates="user", lazy="select")
     browsing_history = relationship("BrowsingHistory", back_populates="user", lazy="select")
