@@ -1074,7 +1074,7 @@ createApp({
           goTo('home');
           fetchCart();
         } else {
-          showToast(data.message || '登录失败', 'error');
+          showToast(json.message || '登录失败', 'error');
         }
       } catch (e) {
         showToast('网络错误，请重试', 'error');
